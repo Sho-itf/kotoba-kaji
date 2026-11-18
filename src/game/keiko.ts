@@ -1,6 +1,6 @@
 // 稽古 1 回ぶんの進行。時間は画面側で数え、ここは打鍵・ミス・文の切り替えだけを扱う。
 
-import { RomajiTyper, type InputResult } from "../romaji/index.ts";
+import { RomajiTyper, createHabit, type InputResult } from "../romaji/index.ts";
 import { Deck, type Rng } from "./deck.ts";
 import { calcScore } from "./score.ts";
 import type { Sentence } from "./sentences.ts";
@@ -31,6 +31,8 @@ export interface RunResult {
 
 export class Keiko {
   private readonly deck: Deck;
+  /** 打ち方の癖。稽古 1 回ぶんを通して覚える(文ごとの RomajiTyper に渡す)。 */
+  private readonly habit = createHabit();
   private _sentence!: Sentence;
   private _typer!: RomajiTyper;
   private sentenceMisses = 0;
@@ -101,7 +103,7 @@ export class Keiko {
     // 読みが記号だけの文は打つものが無いので飛ばす
     for (let tries = 0; tries < 100; tries++) {
       const s = this.deck.next();
-      const typer = new RomajiTyper(s.kana);
+      const typer = new RomajiTyper(s.kana, this.habit);
       if (!typer.done) {
         this._sentence = s;
         this._typer = typer;

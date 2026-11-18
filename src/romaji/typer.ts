@@ -32,6 +32,19 @@ function tagsOf(romaji: string): string[] {
   return STYLE_TAGS.filter(([, re]) => re.test(romaji)).map(([t]) => t);
 }
 
+/**
+ * 打ち方の癖の記憶。文をまたいで使えるように、RomajiTyper の外に持てる。
+ * history:かな → そのかなを打った綴り、tagCount:綴りの癖(sh・sy など)ごとの回数。
+ */
+export interface Habit {
+  history: Map<string, string>;
+  tagCount: Map<string, number>;
+}
+
+export function createHabit(): Habit {
+  return { history: new Map(), tagCount: new Map() };
+}
+
 /** 次に打てるキー 1 つぶんの情報 */
 interface Option {
   key: string;
@@ -54,12 +67,12 @@ export class RomajiTyper {
   private doneKana = 0;
   private readonly missList: Miss[] = [];
   private correctKeys = 0;
-  /** 打ち終えた単位のかなと綴り(癖を見分けるのに使う) */
-  private readonly history = new Map<string, string>();
-  private readonly tagCount = new Map<string, number>();
+  /** 打ち方の癖の記憶(ミスで数えるキーを選ぶのに使う) */
+  private readonly habit: Habit;
 
-  constructor(kana: string) {
+  constructor(kana: string, habit: Habit = createHabit()) {
     this.kana = kana;
+    this.habit = habit;
     this.units = toUnits(kana);
     this.skipSymbols();
   }
@@ -184,8 +197,8 @@ export class RomajiTyper {
 
   private finishUnit(): void {
     const unit = this.units[this.index];
-    this.history.set(unit.kana, this.current);
-    for (const t of tagsOf(this.current)) this.tagCount.set(t, (this.tagCount.get(t) ?? 0) + 1);
+    this.habit.history.set(unit.kana, this.current);
+    for (const t of tagsOf(this.current)) this.habit.tagCount.set(t, (this.habit.tagCount.get(t) ?? 0) + 1);
     this.doneRomaji += this.current;
     this.doneKana += unit.kana.length;
     this.current = "";
@@ -231,14 +244,14 @@ export class RomajiTyper {
     if (expected.length <= 1) return expected[0] ?? "";
     // 同じかなを前に打ったときの綴りに続くキー
     for (const o of opts) {
-      if (this.history.get(o.unit.kana) === o.cand.romaji) return o.key;
+      if (this.habit.history.get(o.unit.kana) === o.cand.romaji) return o.key;
     }
     // sh / sy などの癖が、これまでの打ち方に多く出ている方
     let best = expected[0];
     let bestScore = 0;
     for (const e of expected) {
       for (const o of opts.filter((x) => x.key === e)) {
-        const score = tagsOf(o.cand.romaji).reduce((s, t) => s + (this.tagCount.get(t) ?? 0), 0);
+        const score = tagsOf(o.cand.romaji).reduce((s, t) => s + (this.habit.tagCount.get(t) ?? 0), 0);
         if (score > bestScore) {
           best = e;
           bestScore = score;
