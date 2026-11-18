@@ -14,6 +14,11 @@ import { commitRun, getLocalStorage, loadRecord, saveRecord, type KeyValueStore 
 import { isTouchOnly } from "./device.ts";
 import { el, rankSeal } from "./dom.ts";
 
+/** ミリ秒を「8.5」「1」のように秒で表す */
+function formatSeconds(ms: number): string {
+  return String(Math.round(ms / 100) / 10);
+}
+
 type Screen = "loading" | "error" | "idle" | "play" | "result";
 
 interface PlayState {
@@ -42,9 +47,11 @@ interface PlayView {
   romajiRest: HTMLElement;
   notice: HTMLElement;
   ippon: HTMLElement;
+  bonus: HTMLElement;
   prev: HTMLElement;
   missTimer: number;
   ipponTimer: number;
+  bonusTimer: number;
 }
 
 export function startApp(root: HTMLElement): void {
@@ -98,7 +105,8 @@ export function startApp(root: HTMLElement): void {
         el("ul", { class: "howto" },
           el("li", { text: "Enter か Space で稽古を始める" }),
           el("li", { text: "Esc で中断(中断した回は記録しない)" }),
-          el("li", { text: "稽古は 60 秒。入力は半角英数にしてください" }),
+          el("li", { text: "稽古は 60 秒から。一本(ミスなしの 1 文)を取ると時間が延びます" }),
+          el("li", { text: "入力は半角英数にしてください" }),
         ),
         start,
         el("footer", { class: "foot" },
@@ -169,6 +177,7 @@ export function startApp(root: HTMLElement): void {
     window.clearInterval(play.timer);
     window.clearTimeout(play.view.missTimer);
     window.clearTimeout(play.view.ipponTimer);
+    window.clearTimeout(play.view.bonusTimer);
     play = null;
   }
 
@@ -182,6 +191,7 @@ export function startApp(root: HTMLElement): void {
     const romajiRest = el("span", { class: "rest" });
     const notice = el("p", { class: "notice", attrs: { role: "alert" } });
     const ippon = el("span", { class: "ippon", text: "一本", attrs: { "aria-live": "polite" } });
+    const bonus = el("span", { class: "bonus", attrs: { "aria-hidden": "true" } });
     const prev = el("p", { class: "prev" });
     const card = el("section", { class: "card" },
       sentence,
@@ -191,7 +201,7 @@ export function startApp(root: HTMLElement): void {
     const rootNode = el("main", { class: "screen play" },
       el("header", { class: "hud" },
         el("span", { class: "label", text: "残り" }),
-        el("span", {}, timeText, el("span", { class: "unit", text: " 秒" })),
+        el("span", {}, timeText, el("span", { class: "unit", text: " 秒" }), bonus),
         el("span", { class: "hud-gap" }),
         ippon,
       ),
@@ -203,7 +213,7 @@ export function startApp(root: HTMLElement): void {
     );
     return {
       root: rootNode,
-      parts: { timeText, barFill, card, sentence, kanaDone, kanaRest, romajiTyped, romajiRest, notice, ippon, prev, missTimer: 0, ipponTimer: 0 },
+      parts: { timeText, barFill, card, sentence, kanaDone, kanaRest, romajiTyped, romajiRest, notice, ippon, bonus, prev, missTimer: 0, ipponTimer: 0, bonusTimer: 0 },
     };
   }
 
@@ -238,7 +248,8 @@ export function startApp(root: HTMLElement): void {
   function updateTime(state: PlayState): void {
     const left = state.practice.remaining(performance.now());
     state.view.timeText.textContent = String(Math.ceil(left / 1000));
-    state.view.barFill.style.width = `${(left / DURATION_MS) * 100}%`;
+    // 時間の線は、最初の長さを満ちた状態とする。延びて超えた分は、満ちたままにする。
+    state.view.barFill.style.width = `${Math.min(1, left / DURATION_MS) * 100}%`;
     const over = state.practice.tick(performance.now());
     if (over && over.type === "timeup") finishPlay(state, over.result);
   }
@@ -259,7 +270,7 @@ export function startApp(root: HTMLElement): void {
     const done = commitRun(store, record, entry, run.missKeys);
     record = done.record;
     saveFailed = !done.saved;
-    renderResult(run, done.newBest, claimedRank(done.previous), claimedRank(record));
+    renderResult(run, state.practice.bonusMs, done.newBest, claimedRank(done.previous), claimedRank(record));
   }
 
   function onPlayKey(e: KeyboardEvent): void {
@@ -292,6 +303,13 @@ export function startApp(root: HTMLElement): void {
         if (ev.finished) {
           if (ev.finished.ippon) {
             v.ippon.classList.add("show");
+            if (ev.bonusMs) {
+              v.bonus.textContent = `+${formatSeconds(ev.bonusMs)} 秒`;
+              v.bonus.classList.add("show");
+              window.clearTimeout(v.bonusTimer);
+              v.bonusTimer = window.setTimeout(() => v.bonus.classList.remove("show"), 1200);
+              updateTime(state);
+            }
             window.clearTimeout(v.ipponTimer);
             v.ipponTimer = window.setTimeout(() => v.ippon.classList.remove("show"), 900);
           }
@@ -304,7 +322,7 @@ export function startApp(root: HTMLElement): void {
   }
 
   // ---------- 結果の画面 ----------
-  function renderResult(run: RunResult, newBest: boolean, rankBefore: Rank, rankAfter: Rank): void {
+  function renderResult(run: RunResult, bonusMs: number, newBest: boolean, rankBefore: Rank, rankAfter: Rank): void {
     screen = "result";
     resultShownAt = performance.now();
     const misses = topMisses(run.missKeys, TOP_MISSES);
@@ -328,7 +346,8 @@ export function startApp(root: HTMLElement): void {
         ),
         ...notes,
         el("dl", { class: "stats" },
-          row("1 分あたりの打鍵数", String(run.keystrokes)),
+          row("打鍵数", String(run.keystrokes)),
+          ...(bonusMs > 0 ? [row("延びた時間", `${formatSeconds(bonusMs)} 秒`)] : []),
           row("正確さ", `${formatAccuracy(accuracyTenths(run.keystrokes, run.misses))} %`),
           row("打てた文", `${run.sentences} 文`),
           row("一本", `${run.ippon} 本`),

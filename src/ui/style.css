@@ -102,6 +102,8 @@ button:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 3px; }
 .bar-fill { height: 100%; width: 100%; background: var(--c-text); }
 .ippon { color: var(--c-ippon); font-family: var(--mincho); font-size: 1.2rem; letter-spacing: 0.2em; opacity: 0; transition: opacity 0.25s; }
 .ippon.show { opacity: 1; }
+.bonus { margin-left: 0.8em; color: var(--c-sub); font-size: 0.85rem; opacity: 0; transition: opacity 0.25s; }
+.bonus.show { opacity: 1; }
 
 .card { border-top: 1px solid var(--c-rule); border-bottom: 1px solid var(--c-rule); padding: 1.6em 0.6em; margin-inline: -0.6em; transition: background-color 0.1s; }
 .card.miss { background: var(--c-miss-bg); }
@@ -139,5 +141,5 @@ button:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 3px; }
 
 /* 動きを減らす設定:ふわっと変わる動き(transition)だけをやめる。色の変化は動きではないので、ミスの塗りはそのまま出す。 */
 @media (prefers-reduced-motion: reduce) {
-  .ippon, .card { transition: none; }
+  .ippon, .bonus, .card { transition: none; }
 }

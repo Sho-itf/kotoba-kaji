@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { decideMenuKey, decidePlayKey, type KeyInfo } from "../src/game/input.ts";
 import { Keiko } from "../src/game/keiko.ts";
-import { Practice } from "../src/game/practice.ts";
+import { Practice, ipponBonusMs } from "../src/game/practice.ts";
 import type { Sentence } from "../src/game/sentences.ts";
 import { isTouchOnly } from "../src/ui/device.ts";
 
@@ -193,5 +193,65 @@ describe("タッチだけの端末", () => {
   it("判断できないときは、タッチだけとしない", () => {
     expect(isTouchOnly(undefined)).toBe(false);
     expect(isTouchOnly(() => { throw new Error("だめ"); })).toBe(false);
+  });
+});
+
+describe("一本で時間が延びる", () => {
+  const bonusOf = (ev: ReturnType<Practice["handleKey"]>) => (ev.type === "progress" ? ev.bonusMs : undefined);
+
+  it("延び方は 1 本目 0.5 秒、2 本目からは 1 秒", () => {
+    expect([0, 1, 2, 3, 10].map(ipponBonusMs)).toEqual([0, 500, 1000, 1000, 1000]);
+  });
+
+  it("一本を続けると 0.5 → 1 → 1 秒と延び、残り時間と合計に反映される", () => {
+    const p = practice(["あ", "あ", "あ"]);
+    expect(bonusOf(p.handleKey(key("a"), 2000))).toBe(500);
+    expect(bonusOf(p.handleKey(key("a"), 3000))).toBe(1000);
+    expect(bonusOf(p.handleKey(key("a"), 4000))).toBe(1000);
+    expect(p.bonusMs).toBe(2500);
+    expect(p.totalMs).toBe(DURATION + 2500);
+    expect(p.remaining(4000)).toBe(DURATION + 2500 - 3000);
+  });
+
+  it("ミスのある文で終えると連続が切れ、次の一本はまた 0.5 秒から", () => {
+    const p = practice(["あ", "あ", "あ", "あ"]);
+    expect(bonusOf(p.handleKey(key("a"), 2000))).toBe(500);
+    expect(bonusOf(p.handleKey(key("a"), 3000))).toBe(1000);
+    // 3 文目はミスしてから打ち終える(一本にならず、延びない)
+    expect(p.handleKey(key("x"), 4000).type).toBe("miss");
+    expect(bonusOf(p.handleKey(key("a"), 5000))).toBeUndefined();
+    expect(p.bonusMs).toBe(1500);
+    expect(bonusOf(p.handleKey(key("a"), 6000))).toBe(500);
+    expect(p.bonusMs).toBe(2000);
+  });
+
+  it("途中のミスだけでは連続は切れない(その文を打ち終えたときに切れる)", () => {
+    const p = practice(["ああ", "ああ"]);
+    p.handleKey(key("x"), 2000); // ミス
+    p.handleKey(key("a"), 3000);
+    expect(bonusOf(p.handleKey(key("a"), 4000))).toBeUndefined();
+    p.handleKey(key("a"), 5000);
+    expect(bonusOf(p.handleKey(key("a"), 6000))).toBe(500);
+  });
+
+  it("延びたあとの時間切れは、延びた分だけ遅れて起きる", () => {
+    const p = practice(["あ", "あ"]);
+    p.handleKey(key("a"), 2000); // +0.5
+    p.handleKey(key("a"), 3000); // +1
+    // 元の終わり(61_000)を過ぎても、1.5 秒のあいだは続く
+    expect(p.tick(61_000)).toBeNull();
+    expect(p.tick(62_499)).toBeNull();
+    expect(p.remaining(62_499)).toBe(1);
+    expect(p.tick(62_500)?.type).toBe("timeup");
+    expect(p.tick(62_501)).toBeNull();
+  });
+
+  it("時間切れのあとのキーは数えず、延びもしない", () => {
+    const p = practice(["あ", "あ"]);
+    p.handleKey(key("a"), 2000); // +0.5
+    const late = p.handleKey(key("a"), 61_600); // 元の終わり 61_000 + 0.5 秒 = 61_500 を過ぎている
+    expect(late.type).toBe("timeup");
+    expect(p.bonusMs).toBe(500);
+    if (late.type === "timeup") expect(late.result.keystrokes).toBe(1);
   });
 });
