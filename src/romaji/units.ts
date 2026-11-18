@@ -69,23 +69,30 @@ function nCandidates(next: string): Candidate[] {
   return list.map((r) => cand({ romaji: r, kana: 1 }));
 }
 
-/** っ + 次の単位。次の綴りの最初の子音を重ねる綴りと、っ を単独で打つ綴り。 */
-function sokuonCandidates(next: Unit | undefined): Candidate[] {
+/**
+ * っ + 次の単位。次の綴りの最初の子音を重ねる綴りと、っ を単独で打つ綴り。
+ * symbols は っ と次の単位のあいだにある飛ばす記号(「たっ、た」の「、」)。
+ */
+function sokuonCandidates(next: Unit | undefined, symbols = ""): Candidate[] {
   const alone = SMALL_TSU.map((r) => cand({ romaji: r, kana: 1 }));
   if (!next || next.skip) return alone;
+  // 記号は打たないので、綴りの長さ 0 の部分として入れる(かなの進みだけ数える)
+  const gap: Segment[] = symbols ? [{ romaji: "", kana: symbols.length }] : [];
   const doubled: Candidate[] = [];
   for (const c of next.candidates) {
     const head = c.romaji[0];
     if (/[a-z]/.test(head) && !(VOWELS + "nxl").includes(head)) {
-      doubled.push(cand({ romaji: head, kana: 1 }, ...c.segments));
+      doubled.push(cand({ romaji: head, kana: 1 }, ...gap, ...c.segments));
     }
   }
   // っち = tchi(ch で始まる綴りの前に t)
   for (const c of next.candidates) {
-    if (c.romaji.startsWith("ch")) doubled.push(cand({ romaji: "t", kana: 1 }, ...c.segments));
+    if (c.romaji.startsWith("ch")) doubled.push(cand({ romaji: "t", kana: 1 }, ...gap, ...c.segments));
   }
   const separate: Candidate[] = [];
-  for (const a of alone) for (const c of next.candidates) separate.push(cand(...a.segments, ...c.segments));
+  for (const a of alone) {
+    for (const c of next.candidates) separate.push(cand(...a.segments, ...gap, ...c.segments));
+  }
   return uniq([...doubled, ...separate]);
 }
 
@@ -113,7 +120,9 @@ export function toUnits(kana: string): Unit[] {
     }
   }
 
-  // っ を次の単位と合わせる(後ろから)。次が っ・ん・母音・な行のときは単独だけ。
+  // っ を次の単位と合わせる(後ろから)。あいだの記号は飛ばして見る。
+  // 次が ん のときは合わせない(単独だけ)。次が母音・な行なら、合わせても重ねる綴りは無い。
+  // 次が っ(っっか)なら合わせて、子音を 3 つ重ねる綴り(kkka)も受け付ける。
   const units: Unit[] = [];
   for (let i = raw.length - 1; i >= 0; i--) {
     const u = raw[i];
@@ -121,9 +130,15 @@ export function toUnits(kana: string): Unit[] {
       units.unshift(u);
       continue;
     }
-    const next = units[0];
-    if (next && !next.skip && !next.kana.startsWith("っ") && next.kana !== "ん") {
-      units[0] = { kana: "っ" + next.kana, skip: false, candidates: sokuonCandidates(next) };
+    const j = units.findIndex((x) => !x.skip);
+    const next = j >= 0 ? units[j] : undefined;
+    if (next && next.kana !== "ん") {
+      const symbols = units.slice(0, j).map((x) => x.kana).join("");
+      units.splice(0, j + 1, {
+        kana: "っ" + symbols + next.kana,
+        skip: false,
+        candidates: sokuonCandidates(next, symbols),
+      });
     } else {
       units.unshift({ kana: "っ", skip: false, candidates: sokuonCandidates(undefined) });
     }

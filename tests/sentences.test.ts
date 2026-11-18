@@ -24,6 +24,14 @@ const lastOne: Pick = (c) => c[c.length - 1];
 
 const sentences = data.sentences;
 
+/** keys で、ミスなしで最後まで打てるか */
+function finishes(kana: string, keys: string): boolean {
+  const t = new RomajiTyper(kana);
+  let last = "";
+  for (const k of keys) last = t.input(k);
+  return last === "complete" && t.missCount === 0;
+}
+
 describe("全文テスト", () => {
   it("文の数", () => {
     expect(sentences.length).toBe(1538);
@@ -42,7 +50,17 @@ describe("全文テスト", () => {
         const t = new RomajiTyper(s.kana);
         if (name === "標準の綴り" && t.remaining !== keys) failed.push(`${s.key}: 表示が標準と違う`);
         let last = "";
-        for (const k of keys) last = t.input(k);
+        let prevKana = t.kanaDone;
+        for (const k of keys) {
+          last = t.input(k);
+          // かなの進み具合が戻らない
+          if (t.kanaDone < prevKana) failed.push(`${s.key}: かなの進みが戻った(${t.typed})`);
+          prevKana = t.kanaDone;
+          // 打ったローマ字と残りの表示をつなぐと、正しく打ち終えられる綴りになる
+          if (!finishes(s.kana, t.typed + t.remaining)) {
+            failed.push(`${s.key}: ${t.typed} + ${t.remaining} では打ち終えられない`);
+          }
+        }
         if (last !== "complete" || t.missCount > 0 || t.kanaDone !== s.kana.length) {
           failed.push(`${s.key}: ${s.kana} を ${keys} で打てない(ミス ${t.missCount})`);
         }
