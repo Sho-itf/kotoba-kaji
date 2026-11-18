@@ -22,6 +22,9 @@ const nonStandard: Pick = (c) => c.find((x) => PREFER.some((p) => x.romaji.inclu
 // それぞれの単位で、いちばん後ろの候補(分けた拗音や、単独の っ になりやすい)
 const lastOne: Pick = (c) => c[c.length - 1];
 
+// 1 キーごとの確かめがあるので、全文テストは重い。PC が忙しいときや CI でも落ちないよう、制限時間を長くする。
+const SLOW_TEST_MS = 60_000;
+
 const sentences = data.sentences;
 
 /** keys で、ミスなしで最後まで打てるか */
@@ -66,6 +69,6 @@ describe("全文テスト", () => {
         }
       }
       expect(failed).toEqual([]);
-    });
+    }, SLOW_TEST_MS);
   }
 });
