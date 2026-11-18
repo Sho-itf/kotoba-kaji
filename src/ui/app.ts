@@ -1,6 +1,7 @@
 // 画面の切り替えと、キー入力・時間の扱い。画面は「待機」「稽古」「結果」の 3 つ。
 
 import { DURATION_MS, RESULT_GUARD_MS, TOP_MISSES } from "../game/config.ts";
+import { makeFurigana, partsInRange, type FuriganaPart } from "../game/furigana.ts";
 import { highlightRange } from "../game/highlight.ts";
 import { decideMenuKey, type KeyInfo } from "../game/input.ts";
 import { Keiko, type RunResult } from "../game/keiko.ts";
@@ -42,7 +43,10 @@ interface PlayView {
   barExtra: HTMLElement;
   card: HTMLElement;
   sentence: HTMLElement;
+  kana: HTMLElement;
   kanaDone: HTMLElement;
+  /** ふりがなの 1 かたまりごと。打ち終えたら暗くする。 */
+  rubies: { rt: HTMLElement; end: number }[];
   kanaRest: HTMLElement;
   romajiTyped: HTMLElement;
   romajiRest: HTMLElement;
@@ -182,7 +186,9 @@ export function startApp(root: HTMLElement): void {
     const barExtra = el("b");
     const sentence = el("p", { class: "sentence", attrs: { lang: "ja" } });
     const kanaDone = el("span", { class: "done" });
-    const kanaRest = el("span", { class: "rest" });
+    // ふりがなを付けられなかった文のときだけ使う、ひらがなの行
+    const kana = el("p", { class: "kana", attrs: { lang: "ja", hidden: "" } }, kanaDone, el("span", { class: "rest" }));
+    const kanaRest = kana.querySelector<HTMLElement>(".rest")!;
     const romajiTyped = el("span", { class: "typed" });
     const romajiRest = el("span", { class: "rest" });
     const notice = el("p", { class: "notice", attrs: { role: "alert" } });
@@ -194,7 +200,7 @@ export function startApp(root: HTMLElement): void {
       el("main", { class: "play-main" },
         ippon,
         sentence,
-        el("p", { class: "kana", attrs: { lang: "ja" } }, kanaDone, kanaRest),
+        kana,
         el("div", { class: "field", attrs: { "aria-hidden": "true" } },
           el("p", { class: "line" }, romajiTyped, el("span", { class: "caret" }), romajiRest)),
         notice,
@@ -205,7 +211,7 @@ export function startApp(root: HTMLElement): void {
     );
     return {
       root: rootNode,
-      parts: { timeText, barFill, barExtra, card: rootNode, sentence, kanaDone, kanaRest, romajiTyped, romajiRest, notice, ippon, bonus, prev, missTimer: 0, ipponTimer: 0, bonusTimer: 0 },
+      parts: { timeText, barFill, barExtra, card: rootNode, sentence, kana, rubies: [], kanaDone, kanaRest, romajiTyped, romajiRest, notice, ippon, bonus, prev, missTimer: 0, ipponTimer: 0, bonusTimer: 0 },
     };
   }
 
@@ -214,13 +220,11 @@ export function startApp(root: HTMLElement): void {
     const view = state.view;
     const s = keiko.sentence;
     const range = highlightRange(s.text, s.word, s.wordReading);
-    const nodes: (Node | string)[] = [];
-    if (range) {
-      nodes.push(s.text.slice(0, range.start), el("mark", { text: s.text.slice(range.start, range.end) }), s.text.slice(range.end));
-    } else {
-      nodes.push(s.text);
-    }
-    view.sentence.replaceChildren(...nodes);
+    const parts = makeFurigana(s.text, s.kana);
+    view.rubies = [];
+    // ふりがなを付けられない文は、ひらがなの行を出す
+    view.kana.hidden = parts !== null;
+    view.sentence.replaceChildren(...(parts ? furiganaNodes(parts, range, view) : plainNodes(s.text, range)));
     const p = keiko.previous;
     view.prev.replaceChildren(
       ...(p ? [`${p.sentence.word}(${p.sentence.wordReading})― ${p.sentence.meaning}`] : []),
@@ -228,9 +232,37 @@ export function startApp(root: HTMLElement): void {
     updateTyping(state);
   }
 
+  function plainNodes(text: string, range: { start: number; end: number } | null): Node[] {
+    if (!range) return [document.createTextNode(text)];
+    return [
+      document.createTextNode(text.slice(0, range.start)),
+      el("mark", { text: text.slice(range.start, range.end) }),
+      document.createTextNode(text.slice(range.end)),
+    ];
+  }
+
+  /** ふりがな付きの文。強調の語は <mark> で包む。 */
+  function furiganaNodes(parts: FuriganaPart[], range: { start: number; end: number } | null, view: PlayView): Node[] {
+    const make = (p: FuriganaPart): Node => {
+      if (!p.ruby) return document.createTextNode(p.text);
+      const rt = el("rt", { text: p.ruby });
+      view.rubies.push({ rt, end: p.kanaEnd });
+      return el("ruby", {}, p.text, rt);
+    };
+    const marked = range ? partsInRange(parts, range) : null;
+    if (!marked) return parts.map(make);
+    const [from, to] = marked;
+    return [
+      ...parts.slice(0, from).map(make),
+      el("mark", {}, ...parts.slice(from, to).map(make)),
+      ...parts.slice(to).map(make),
+    ];
+  }
+
   function updateTyping(state: PlayState): void {
     const { typer, sentence } = state.practice.keiko;
     const v = state.view;
+    for (const x of v.rubies) x.rt.classList.toggle("done", typer.kanaDone >= x.end);
     v.kanaDone.textContent = sentence.kana.slice(0, typer.kanaDone);
     v.kanaRest.textContent = sentence.kana.slice(typer.kanaDone);
     v.romajiTyped.textContent = typer.typed;

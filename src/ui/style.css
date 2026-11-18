@@ -94,9 +94,14 @@ button { font: inherit; color: inherit; }
 .ippon-row { height: 34px; display: flex; align-items: center; gap: 18px; color: var(--accent-text); font-family: var(--mincho); letter-spacing: 0.5em; margin-bottom: 16px; opacity: 0; }
 .ippon-row::before, .ippon-row::after { content: ""; width: 56px; height: var(--line); background: var(--accent); }
 .ippon-row.show { opacity: 1; }
-.sentence { margin: 0 0 22px; font-family: var(--mincho); font-size: clamp(1.9rem, 3.4vw, 2.7rem); letter-spacing: var(--track-sentence); text-align: center; line-height: 1.6; overflow-wrap: anywhere; }
+.sentence { margin: 0 0 26px; font-family: var(--mincho); font-size: clamp(1.9rem, 3.4vw, 2.7rem); letter-spacing: var(--track-sentence); text-align: center; line-height: 2.1; overflow-wrap: anywhere; }
 .sentence mark { background: none; color: var(--accent-text); text-decoration: underline; text-decoration-color: var(--accent); text-decoration-thickness: var(--line-accent); text-underline-offset: 0.3em; }
-.kana { margin: 0 0 40px; font-family: var(--mincho); font-size: clamp(1.05rem, 1.7vw, 1.3rem); letter-spacing: var(--track-kana); text-align: center; color: var(--muted); }
+/* ふりがな:明朝で小さく、控えめな色。打ち終えたら、さらに暗くする */
+.sentence rt { font-family: var(--mincho); font-size: 0.38em; letter-spacing: 0.1em; color: var(--muted); text-decoration: none; }
+.sentence rt.done { color: var(--faint); }
+.sentence mark rt { color: var(--muted); }
+.sentence mark rt.done { color: var(--faint); }
+.kana { margin: 0 0 26px; font-family: var(--mincho); font-size: clamp(1.05rem, 1.7vw, 1.3rem); letter-spacing: var(--track-kana); text-align: center; color: var(--muted); }
 .kana .done { color: var(--fg); }
 /* 入力欄の形の枠(本物の入力欄ではない) */
 .field { width: min(720px, 100%); min-height: 62px; display: flex; align-items: center; padding: 10px 24px; border: var(--line) solid var(--rule-strong); background: transparent; font-family: var(--mono); font-size: clamp(1.05rem, 1.7vw, 1.35rem); letter-spacing: 0.06em; }
