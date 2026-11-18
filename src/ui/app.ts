@@ -7,7 +7,7 @@ import { Keiko, type RunResult } from "../game/keiko.ts";
 import { Practice, type PracticeEvent } from "../game/practice.ts";
 import { accuracyShortfallNote, nextRankNote, rankUpNote } from "../game/messages.ts";
 import { accuracyTenths, formatAccuracy, type Rank } from "../game/ranks.ts";
-import { topMisses } from "../game/score.ts";
+import { formatTenths, keysPerSecondTenths, topMisses } from "../game/score.ts";
 import { loadSentences, type Sentence } from "../game/sentences.ts";
 import { claimedRank, parseRecord, serializeRecord, type RecordData, type Run } from "../storage/record.ts";
 import { commitRun, getLocalStorage, loadRecord, saveRecord, type KeyValueStore } from "../storage/store.ts";
@@ -270,7 +270,7 @@ export function startApp(root: HTMLElement): void {
     const done = commitRun(store, record, entry, run.missKeys);
     record = done.record;
     saveFailed = !done.saved;
-    renderResult(run, state.practice.bonusMs, done.newBest, claimedRank(done.previous), claimedRank(record));
+    renderResult(run, state.practice.bonusMs, state.practice.totalMs, done.newBest, claimedRank(done.previous), claimedRank(record));
   }
 
   function onPlayKey(e: KeyboardEvent): void {
@@ -322,7 +322,7 @@ export function startApp(root: HTMLElement): void {
   }
 
   // ---------- 結果の画面 ----------
-  function renderResult(run: RunResult, bonusMs: number, newBest: boolean, rankBefore: Rank, rankAfter: Rank): void {
+  function renderResult(run: RunResult, bonusMs: number, totalMs: number, newBest: boolean, rankBefore: Rank, rankAfter: Rank): void {
     screen = "result";
     resultShownAt = performance.now();
     const misses = topMisses(run.missKeys, TOP_MISSES);
@@ -347,6 +347,7 @@ export function startApp(root: HTMLElement): void {
         ...notes,
         el("dl", { class: "stats" },
           row("打鍵数", String(run.keystrokes)),
+          row("1 秒あたりの打鍵数", formatTenths(keysPerSecondTenths(run.keystrokes, totalMs))),
           ...(bonusMs > 0 ? [row("延びた時間", `${formatSeconds(bonusMs)} 秒`)] : []),
           row("正確さ", `${formatAccuracy(accuracyTenths(run.keystrokes, run.misses))} %`),
           row("打てた文", `${run.sentences} 文`),
