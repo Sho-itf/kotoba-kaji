@@ -2,21 +2,32 @@
 
 import { DURATION_MS, RESULT_GUARD_MS, TOP_MISSES } from "../game/config.ts";
 import { highlightRange } from "../game/highlight.ts";
+import { decideMenuKey, type KeyInfo } from "../game/input.ts";
 import { Keiko, type RunResult } from "../game/keiko.ts";
-import { nextRank, rankOf } from "../game/ranks.ts";
+import { Practice, type PracticeEvent } from "../game/practice.ts";
+import { nextRank, rankOf, type Rank } from "../game/ranks.ts";
 import { topMisses } from "../game/score.ts";
 import { loadSentences, type Sentence } from "../game/sentences.ts";
-import { applyRun, parseRecord, serializeRecord, type RecordData, type Run } from "../storage/record.ts";
-import { getLocalStorage, loadRecord, saveRecord, type KeyValueStore } from "../storage/store.ts";
+import { parseRecord, serializeRecord, type RecordData, type Run } from "../storage/record.ts";
+import { commitRun, getLocalStorage, loadRecord, saveRecord, type KeyValueStore } from "../storage/store.ts";
+import { isTouchOnly } from "./device.ts";
 import { el, rankSeal } from "./dom.ts";
 
 type Screen = "loading" | "error" | "idle" | "play" | "result";
 
 interface PlayState {
-  keiko: Keiko;
-  startAt: number;
+  practice: Practice;
   timer: number;
   view: PlayView;
+}
+
+function keyInfo(e: KeyboardEvent): KeyInfo {
+  const t = e.target;
+  return {
+    key: e.key, repeat: e.repeat, isComposing: e.isComposing, keyCode: e.keyCode,
+    ctrlKey: e.ctrlKey, metaKey: e.metaKey, altKey: e.altKey,
+    fromControl: t instanceof HTMLButtonElement || t instanceof HTMLInputElement || t instanceof HTMLAnchorElement,
+  };
 }
 
 interface PlayView {
@@ -37,13 +48,15 @@ interface PlayView {
 
 export function startApp(root: HTMLElement): void {
   const store: KeyValueStore | null = getLocalStorage();
-  let record: RecordData = loadRecord(store);
+  const loaded = loadRecord(store);
+  let record: RecordData = loaded.record;
   let sentences: Sentence[] = [];
   let screen: Screen = "loading";
   let play: PlayState | null = null;
   let resultShownAt = 0;
-  let message = "";
+  let message = loaded.broken ? "前の記録を読めませんでした。新しい記録で始めます。" : "";
   let saveFailed = false;
+  const touchOnly = isTouchOnly(typeof window.matchMedia === "function" ? window.matchMedia.bind(window) : undefined);
 
   const show = (...nodes: Node[]) => root.replaceChildren(...nodes);
 
@@ -80,6 +93,7 @@ export function startApp(root: HTMLElement): void {
           ),
           el("p", { class: "muted small", text: next ? `次の ${next.name} まで あと ${next.min - bestScore}` : "いちばん上の位です。" }),
         ),
+        touchOnly ? el("p", { class: "touch-note", text: "キーボードのある端末で稽古してください。" }) : el("span"),
         el("ul", { class: "howto" },
           el("li", { text: "Enter か Space で稽古を始める" }),
           el("li", { text: "Esc で中断(中断した回は記録しない)" }),
@@ -139,10 +153,10 @@ export function startApp(root: HTMLElement): void {
     if (sentences.length === 0) return;
     stopPlay();
     screen = "play";
-    const keiko = new Keiko(sentences);
+    const practice = new Practice(new Keiko(sentences), performance.now(), DURATION_MS);
     const view = buildPlayView();
     show(view.root);
-    const state: PlayState = { keiko, startAt: performance.now(), timer: 0, view: view.parts };
+    const state: PlayState = { practice, timer: 0, view: view.parts };
     play = state;
     setSentence(state);
     updateTime(state);
@@ -193,7 +207,8 @@ export function startApp(root: HTMLElement): void {
   }
 
   function setSentence(state: PlayState): void {
-    const { keiko, view } = state;
+    const keiko = state.practice.keiko;
+    const view = state.view;
     const s = keiko.sentence;
     const range = highlightRange(s.text, s.word, s.wordReading);
     const nodes: (Node | string)[] = [];
@@ -211,7 +226,7 @@ export function startApp(root: HTMLElement): void {
   }
 
   function updateTyping(state: PlayState): void {
-    const { typer, sentence } = state.keiko;
+    const { typer, sentence } = state.practice.keiko;
     const v = state.view;
     v.kanaDone.textContent = sentence.kana.slice(0, typer.kanaDone);
     v.kanaRest.textContent = sentence.kana.slice(typer.kanaDone);
@@ -220,17 +235,16 @@ export function startApp(root: HTMLElement): void {
   }
 
   function updateTime(state: PlayState): void {
-    const left = Math.max(0, DURATION_MS - (performance.now() - state.startAt));
+    const left = state.practice.remaining(performance.now());
     state.view.timeText.textContent = String(Math.ceil(left / 1000));
     state.view.barFill.style.width = `${(left / DURATION_MS) * 100}%`;
-    if (left <= 0) finishPlay(state);
+    const over = state.practice.tick(performance.now());
+    if (over && over.type === "timeup") finishPlay(state, over.result);
   }
 
-  function finishPlay(state: PlayState): void {
+  function finishPlay(state: PlayState, run: RunResult): void {
     if (play !== state) return;
-    const run = state.keiko.result();
     stopPlay();
-    const before = rankOf(record.best?.score ?? 0);
     const entry: Run = {
       at: new Date().toISOString(),
       keystrokes: run.keystrokes,
@@ -240,52 +254,56 @@ export function startApp(root: HTMLElement): void {
       sentences: run.sentences,
       ippon: run.ippon,
     };
-    const applied = applyRun(record, entry, run.missKeys);
-    record = applied.record;
-    saveFailed = !saveRecord(store, record);
-    renderResult(run, applied.newBest, before.name, rankOf(record.best?.score ?? 0));
+    // 保存の直前に、保存されている記録を読み直してから足す
+    const done = commitRun(store, record, entry, run.missKeys);
+    record = done.record;
+    saveFailed = !done.saved;
+    renderResult(run, done.newBest, rankOf(done.previous.best?.score ?? 0), rankOf(record.best?.score ?? 0));
   }
 
   function onPlayKey(e: KeyboardEvent): void {
     const state = play;
     if (!state) return;
-    if (e.key === "Escape") {
-      stopPlay();
-      renderIdle();
-      return;
-    }
-    // 日本語入力がオンのときは、打鍵として扱わず、案内を出す(ミスには数えない)
-    if (e.isComposing || e.key === "Process" || e.keyCode === 229) {
-      state.view.notice.textContent = "入力を半角英数にしてください。";
-      return;
-    }
-    if (e.ctrlKey || e.metaKey || e.altKey) return; // ブラウザのショートカットは邪魔しない
-    if (e.key.length !== 1) return;
-    e.preventDefault();
-    state.view.notice.textContent = "";
-
-    const { result, finished } = state.keiko.input(e.key);
-    if (result === "miss") {
-      const v = state.view;
-      v.card.classList.add("miss");
-      window.clearTimeout(v.missTimer);
-      v.missTimer = window.setTimeout(() => v.card.classList.remove("miss"), 160);
-    }
-    if (finished) {
-      if (finished.ippon) {
-        const v = state.view;
-        v.ippon.classList.add("show");
-        window.clearTimeout(v.ipponTimer);
-        v.ipponTimer = window.setTimeout(() => v.ippon.classList.remove("show"), 900);
-      }
-      setSentence(state);
-    } else {
-      updateTyping(state);
+    const ev: PracticeEvent = state.practice.handleKey(keyInfo(e), performance.now());
+    if (ev.preventDefault) e.preventDefault();
+    const v = state.view;
+    switch (ev.type) {
+      case "abort":
+        stopPlay();
+        renderIdle();
+        return;
+      case "timeup":
+        finishPlay(state, ev.result);
+        return;
+      case "ime":
+        v.notice.textContent = "入力を半角英数にしてください。";
+        return;
+      case "none":
+        return;
+      case "miss":
+        v.notice.textContent = "";
+        v.card.classList.add("miss");
+        window.clearTimeout(v.missTimer);
+        v.missTimer = window.setTimeout(() => v.card.classList.remove("miss"), 160);
+        return;
+      case "progress":
+        v.notice.textContent = "";
+        if (ev.finished) {
+          if (ev.finished.ippon) {
+            v.ippon.classList.add("show");
+            window.clearTimeout(v.ipponTimer);
+            v.ipponTimer = window.setTimeout(() => v.ippon.classList.remove("show"), 900);
+          }
+          setSentence(state);
+        } else {
+          updateTyping(state);
+        }
+        return;
     }
   }
 
   // ---------- 結果の画面 ----------
-  function renderResult(run: RunResult, newBest: boolean, rankBefore: string, rankAfter: ReturnType<typeof rankOf>): void {
+  function renderResult(run: RunResult, newBest: boolean, rankBefore: Rank, rankAfter: Rank): void {
     screen = "result";
     resultShownAt = performance.now();
     const misses = topMisses(run.missKeys, TOP_MISSES);
@@ -293,7 +311,7 @@ export function startApp(root: HTMLElement): void {
 
     const notes: Node[] = [];
     if (newBest) notes.push(el("p", { class: "note accent", text: "ベストを更新しました。" }));
-    if (rankAfter.name !== rankBefore) notes.push(el("p", { class: "note accent", text: `位が上がりました:${rankBefore} → ${rankAfter.name}` }));
+    if (rankAfter.name !== rankBefore.name) notes.push(el("p", { class: "note accent", text: `位が上がりました:${rankBefore.name} → ${rankAfter.name}` }));
     if (saveFailed) notes.push(el("p", { class: "note muted", text: "この環境では記録を保存できませんでした。" }));
 
     show(
@@ -328,17 +346,10 @@ export function startApp(root: HTMLElement): void {
   window.addEventListener("keydown", (e) => {
     if (screen === "play") return onPlayKey(e);
     if (screen !== "idle" && screen !== "result") return;
-    // ボタンやファイル選択の上では、そのキーはボタンのものにする
-    const t = e.target;
-    if (t instanceof HTMLButtonElement || t instanceof HTMLInputElement || t instanceof HTMLAnchorElement) return;
-    if (e.repeat || e.isComposing) return;
-    if (e.key === "Enter" || e.key === " ") {
-      if (screen === "result" && performance.now() - resultShownAt < RESULT_GUARD_MS) return;
-      e.preventDefault();
-      startPlay();
-    } else if (e.key === "Escape" && screen === "result") {
-      renderIdle();
-    }
+    const d = decideMenuKey(screen, keyInfo(e), performance.now() - resultShownAt, RESULT_GUARD_MS);
+    if (d.preventDefault) e.preventDefault();
+    if (d.action === "start") startPlay();
+    else if (d.action === "idle") renderIdle();
   });
 
   // ---------- 起動 ----------
