@@ -4,7 +4,7 @@ import { Deck } from "../src/game/deck.ts";
 import { highlightRange } from "../src/game/highlight.ts";
 import { Keiko } from "../src/game/keiko.ts";
 import { accuracyTenths, nextRankAfter, RANKS, rankByName, rankByScoreOnly, rankOfRun } from "../src/game/ranks.ts";
-import { calcScore, topMisses } from "../src/game/score.ts";
+import { calcScore, formatTenths, keysPerSecondTenths, topMisses } from "../src/game/score.ts";
 import { parseSentences, type Sentence } from "../src/game/sentences.ts";
 
 function sentence(key: string, kana: string, text = kana): Sentence {
@@ -221,5 +221,22 @@ describe("例文データ", () => {
     expect(parseSentences(data).length).toBe(1538);
     expect(() => parseSentences({})).toThrow();
     expect(() => parseSentences({ sentences: [{ key: "a" }] })).toThrow();
+  });
+});
+
+describe("1 秒あたりの打鍵数", () => {
+  it("延びなかった回は、60 秒で割る", () => {
+    expect(formatTenths(keysPerSecondTenths(120, 60_000))).toBe("2.0");
+    expect(formatTenths(keysPerSecondTenths(125, 60_000))).toBe("2.0"); // 2.083 → 2.0
+  });
+
+  it("延びた回は、延びた時間も含めて割り、小数 1 けたで切り捨てる", () => {
+    expect(formatTenths(keysPerSecondTenths(312, 68_500))).toBe("4.5"); // 4.554
+    expect(formatTenths(keysPerSecondTenths(300, 60_000))).toBe("5.0");
+    expect(formatTenths(keysPerSecondTenths(299, 60_000))).toBe("4.9"); // 4.983 を丸めない
+  });
+
+  it("打鍵数 0 の回は 0.0", () => {
+    expect(formatTenths(keysPerSecondTenths(0, 60_000))).toBe("0.0");
   });
 });

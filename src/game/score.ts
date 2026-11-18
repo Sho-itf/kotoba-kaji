@@ -31,3 +31,14 @@ export function topMisses(missKeys: Record<string, number>, n: number): MissEntr
     .sort((a, b) => b.count - a.count || a.kana.localeCompare(b.kana) || a.key.localeCompare(b.key))
     .slice(0, n);
 }
+
+/** 1 秒あたりの打鍵数を、10 倍の整数で返す(小数 1 けたで切り捨て)。整数だけで計算するので誤差が出ない。 */
+export function keysPerSecondTenths(keystrokes: number, durationMs: number): number {
+  if (keystrokes <= 0 || durationMs <= 0) return 0;
+  return Math.floor((keystrokes * 10_000) / durationMs);
+}
+
+/** 10 倍の整数を、小数 1 けたの文字にする(45 → "4.5") */
+export function formatTenths(tenths: number): string {
+  return `${Math.floor(tenths / 10)}.${tenths % 10}`;
+}
