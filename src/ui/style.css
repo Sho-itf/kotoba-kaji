@@ -1,145 +1,165 @@
 /*
- * 色は、まず「ライト/ダークで値が変わる基本の色」を決め、
- * 画面の各部分(役割)は、その基本の色を指す変数で決める。
- * こうすると、ライトとダークで同じ役割に同じ色が当たる。
- * 文字と背景の明るさの差(WCAG の比)は、本文 4.5:1 以上、罫線などは 3:1 以上にしてある。
+ * 見た目。ダークだけ(墨の地・朱・筆の跡)。色・線・字の間隔は、まず変数にまとめてある。
+ * 朱は差し色として少しだけ使う。影・光沢は使わない。
  */
-
-/* ---- 基本の色:ライト(生成り・墨・朱) ---- */
 :root {
-  --bg: #f6f5f1;
-  --fg: #1f2328;
-  --muted: #5a5e65;       /* 背景との比 5.97 */
-  --rule: #d9d6cc;        /* 飾りの罫線 */
-  --rule-strong: #8d8a80; /* 枠・下線など、見えている必要がある線(比 3.17) */
-  --accent: #b8371f;      /* 朱。背景との比 5.34 */
-  --on-accent: #f6f5f1;   /* 朱で塗った上の文字 */
-  --tint: #f4e2dc;        /* ミスのときの薄い朱 */
-
+  /* 色 */
+  --bg: #111113;            /* 墨の地 */
+  --fg: #ece9e2;            /* 文字(明るい生成り) */
+  --muted: #a3a09a;         /* 薄い文字(まだの所など) */
+  --faint: #6b6965;         /* 飾りの線・薄い印 */
+  --rule: #34343a;          /* 罫線 */
+  --rule-strong: #8d8b86;   /* 入力欄の形の枠 */
+  --accent: #e2492d;        /* 朱(線・枠) */
+  --accent-text: #f0775d;   /* 朱(小さい文字用に、少し明るく) */
+  --accent-fill: #cf3f26;   /* 朱の塗り(段の印)。白い字を乗せる */
+  --on-accent: #ffffff;
+  --tint: #3a1c17;          /* ミスのときの薄い朱 */
+  /* 線の太さ */
+  --line: 1px;
+  --line-accent: 2px;
+  --time-line: 3px;
+  /* 字の間隔 */
+  --track-title: 0.32em;
+  --track-sentence: 0.22em;
+  --track-kana: 0.12em;
+  --track-label: 0.08em;
+  /* 筆の跡の濃さ(0 でなし) */
+  --brush-opacity: 1;
+  /* 字 */
   --mincho: "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", serif;
   --gothic: system-ui, "Hiragino Sans", "Yu Gothic UI", "Yu Gothic", "Meiryo", sans-serif;
   --mono: ui-monospace, "Cascadia Mono", Consolas, "SFMono-Regular", monospace;
-  color-scheme: light dark;
-}
-
-/* ---- 基本の色:ダーク(ライトを反転。朱は暗い背景でも読める明るさに) ---- */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #17181b;
-    --fg: #e8e6e1;
-    --muted: #a1a3a9;       /* 比 7.04 */
-    --rule: #34363b;
-    --rule-strong: #6b6e75; /* 比 3.48 */
-    --accent: #ef7c64;      /* 比 6.54 */
-    --on-accent: #17181b;
-    --tint: #4a2a24;
-  }
-}
-
-/* ---- 役割ごとの色(ライト・ダークで共通) ---- */
-:root {
-  --c-text: var(--fg);
-  --c-sub: var(--muted);               /* 補足・薄い文字 */
-  --c-word: var(--accent);             /* お題の語の強調 */
-  --c-kana-done: var(--fg);            /* ひらがな:打てた所 */
-  --c-kana-rest: var(--muted);         /* ひらがな:まだの所 */
-  --c-typed: var(--fg);                /* ローマ字:打った分 */
-  --c-rest: var(--muted);              /* ローマ字:残り */
-  --c-miss-bg: var(--tint);            /* ミスの反応 */
-  --c-ippon: var(--accent);            /* 一本 */
-  --c-seal: var(--fg);                 /* 位の印(級) */
-  --c-seal-dan: var(--accent);         /* 位の印(段) */
-  --c-seal-dan-text: var(--on-accent);
-  --c-rule: var(--rule);               /* 罫線 */
-  --c-border: var(--rule-strong);      /* 枠・下線 */
-  --c-button: var(--fg);               /* ボタンの塗り */
-  --c-button-text: var(--bg);
-  --c-note: var(--accent);             /* 知らせの文字・印 */
-  --c-focus: var(--fg);                /* フォーカスの枠 */
+  /* ボタンの先の切り込み */
+  --cut: 24px;
+  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--fg); }
+body { font-family: var(--gothic); line-height: 1.7; overflow-x: hidden; }
+button { font: inherit; color: inherit; }
 
-html, body { margin: 0; background: var(--bg); color: var(--c-text); }
-body { font-family: var(--gothic); line-height: 1.7; overflow-wrap: anywhere; }
+/* ---- 画面の枠 ---- */
+.stage { position: relative; min-height: 100vh; display: flex; flex-direction: column; overflow: hidden; isolation: isolate; }
+.brush { position: absolute; inset: 0; z-index: -1; background: url("./brush.svg") center / cover no-repeat; opacity: var(--brush-opacity); pointer-events: none; }
 
-.screen { max-width: 760px; margin: 0 auto; padding: 48px 20px 64px; }
+/* ---- 上の帯 ---- */
+.bar { display: flex; align-items: center; height: 76px; padding: 0 40px; border-bottom: var(--line) solid var(--rule); }
+.brand { display: flex; align-items: center; gap: 16px; }
+.brand svg { width: 44px; height: 26px; fill: var(--accent); }
+.brand .vline { width: var(--line); height: 26px; background: var(--faint); }
+.brand .name { font-family: var(--mincho); font-size: 1.25rem; letter-spacing: var(--track-title); }
+.bar .grow { flex: 1; }
+.timer { font-family: var(--mincho); display: flex; align-items: baseline; gap: 10px; }
+.timer .lbl { font-size: 0.95rem; color: var(--muted); letter-spacing: var(--track-label); }
+.timer .num { font-size: 2.8rem; line-height: 1; letter-spacing: 0.04em; }
+.timer .unit { font-size: 0.95rem; color: var(--muted); }
+.timer .bonus { min-width: 4.2em; font-family: var(--gothic); font-size: 0.85rem; color: var(--accent-text); letter-spacing: var(--track-label); opacity: 0; transition: opacity 0.25s; }
+.timer .bonus.show { opacity: 1; }
 
-.label { color: var(--c-sub); font-size: 0.85rem; margin-right: 0.6em; }
-.muted { color: var(--c-sub); }
-.small { font-size: 0.85rem; }
-.accent { color: var(--c-note); }
+/* ---- ボタン(先が斜めに切れた朱の枠) ---- */
+.btn { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 28px; min-width: 430px; height: 78px; padding: 0 var(--cut); border: 0; background: var(--accent); color: var(--fg); font-family: var(--mincho); font-size: 1.55rem; letter-spacing: 0.3em; cursor: pointer;
+  clip-path: polygon(var(--cut) 0, calc(100% - var(--cut)) 0, 100% 50%, calc(100% - var(--cut)) 100%, var(--cut) 100%, 0 50%); }
+.btn::before { content: ""; position: absolute; inset: var(--line-accent); background: var(--bg);
+  clip-path: polygon(calc(var(--cut) - 1px) 0, calc(100% - var(--cut) + 1px) 0, 100% 50%, calc(100% - var(--cut) + 1px) 100%, calc(var(--cut) - 1px) 100%, 0 50%); z-index: 0; }
+.btn > * { position: relative; z-index: 1; }
+.btn svg { width: 14px; height: 22px; fill: none; stroke: var(--fg); stroke-width: 2; stroke-linecap: square; }
+.btn:hover::before { background: #1c1514; }
+/* フォーカス(クリップされるので、枠の色を明るくして見せる) */
+.btn:focus-visible { outline: none; background: var(--fg); }
+.btn.small { min-width: 330px; height: 64px; font-size: 1.25rem; }
 
-/* 位の印 */
-.seal { display: inline-block; border: 1px solid var(--c-seal); padding: 0 0.6em; font-family: var(--mincho); font-size: 1.1rem; line-height: 1.8; white-space: nowrap; }
-.seal.dan { border-color: var(--c-seal-dan); background: var(--c-seal-dan); color: var(--c-seal-dan-text); }
+/* ---- 待機 ---- */
+.idle-main { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 30px; padding: 40px 24px 70px; }
+.links { display: flex; align-items: center; }
+.links button { font: inherit; font-size: 0.9rem; color: var(--muted); background: none; border: 0; padding: 4px 36px; cursor: pointer; letter-spacing: var(--track-label); }
+.links button:hover, .links button:focus-visible { color: var(--fg); }
+.links button:focus-visible { outline: 1px solid var(--fg); outline-offset: 2px; }
+.links .vline { width: var(--line); height: 28px; background: var(--faint); }
+.standing { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px 30px; font-size: 0.9rem; color: var(--muted); }
+.standing .item { display: flex; align-items: center; gap: 10px; }
+.standing .num { font-family: var(--mincho); font-size: 1.3rem; color: var(--fg); }
+.howto { margin: 0; text-align: center; font-size: 0.85rem; color: var(--muted); letter-spacing: var(--track-label); }
+.howto p { margin: 0; }
+.touch-note { margin: 0; max-width: 560px; padding: 2px 0 2px 12px; border-left: var(--line-accent) solid var(--accent); font-size: 0.85rem; color: var(--muted); }
+.status { margin: 0; min-height: 1.4em; text-align: center; font-size: 0.85rem; color: var(--muted); }
 
-button { font: inherit; color: inherit; cursor: pointer; border: 1px solid var(--c-border); background: transparent; padding: 0.5em 1.4em; border-radius: 0; }
-button.primary { background: var(--c-button); color: var(--c-button-text); border-color: var(--c-button); }
-button.quiet { border: none; border-bottom: 1px solid var(--c-border); padding: 0.1em 0; margin-right: 1.4em; color: var(--c-sub); font-size: 0.85rem; }
+/* ---- 位の印:段は朱の塗りに白い字、級は枠だけ ---- */
+.seal { display: inline-block; padding: 0 0.7em; font-family: var(--mincho); font-size: 1.05rem; line-height: 1.8; white-space: nowrap; border: var(--line) solid var(--rule-strong); color: var(--fg); }
+.seal.dan { background: var(--accent-fill); border-color: var(--accent-fill); color: var(--on-accent); }
 
-/* フォーカス(Tab で移ったとき)は、罫線の形の枠で見せる */
-button:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 3px; }
+/* ---- 稽古中 ---- */
+.play-main { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 30px 48px 100px; gap: 0; }
+.ippon-row { height: 34px; display: flex; align-items: center; gap: 18px; color: var(--accent-text); font-family: var(--mincho); letter-spacing: 0.5em; margin-bottom: 16px; opacity: 0; }
+.ippon-row::before, .ippon-row::after { content: ""; width: 56px; height: var(--line); background: var(--accent); }
+.ippon-row.show { opacity: 1; }
+.sentence { margin: 0 0 22px; font-family: var(--mincho); font-size: clamp(1.9rem, 3.4vw, 2.7rem); letter-spacing: var(--track-sentence); text-align: center; line-height: 1.6; overflow-wrap: anywhere; }
+.sentence mark { background: none; color: var(--accent-text); text-decoration: underline; text-decoration-color: var(--accent); text-decoration-thickness: var(--line-accent); text-underline-offset: 0.3em; }
+.kana { margin: 0 0 40px; font-family: var(--mincho); font-size: clamp(1.05rem, 1.7vw, 1.3rem); letter-spacing: var(--track-kana); text-align: center; color: var(--muted); }
+.kana .done { color: var(--fg); }
+/* 入力欄の形の枠(本物の入力欄ではない) */
+.field { width: min(720px, 100%); min-height: 62px; display: flex; align-items: center; padding: 10px 24px; border: var(--line) solid var(--rule-strong); background: transparent; font-family: var(--mono); font-size: clamp(1.05rem, 1.7vw, 1.35rem); letter-spacing: 0.06em; }
+.field .line { margin: 0; min-width: 0; max-width: 100%; word-break: break-all; }
+.field .typed { color: var(--fg); }
+.field .caret { display: inline-block; width: 2px; height: 1.4em; background: var(--fg); margin: 0 1px; vertical-align: middle; }
+.field .rest { color: var(--muted); }
+.miss .field { border-color: var(--accent); background: var(--tint); }
+.prev { min-height: 1.7em; margin: 34px 0 0; font-size: 0.85rem; color: var(--muted); text-align: center; letter-spacing: var(--track-label); }
+.notice { min-height: 1.7em; margin: 14px 0 0; font-size: 0.85rem; color: var(--accent-text); text-align: center; }
+.timeline { position: absolute; left: 0; right: 0; bottom: 0; height: var(--time-line); background: var(--rule); }
+.timeline { display: flex; }
+.timeline i { display: block; height: 100%; width: 100%; background: var(--accent); }
+/* 60 秒を超えて延びたぶん(右の明るい朱)。時間が減ると、先にこちらが縮む。 */
+.timeline b { display: block; height: 100%; width: 0; background: var(--accent-text); }
 
-/* 待機 */
-.title { font-family: var(--mincho); font-size: 2.4rem; font-weight: 600; letter-spacing: 0.12em; margin: 0 0 0.2em; }
-.lead { margin: 0 0 2em; color: var(--c-sub); }
-.standing { border-top: 1px solid var(--c-rule); border-bottom: 1px solid var(--c-rule); padding: 1em 0; margin-bottom: 1.6em; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.4em 2.4em; }
-.standing .num { font-family: var(--mincho); font-size: 1.8rem; }
-.standing p { flex-basis: 100%; margin: 0; }
-.howto { padding: 0; margin: 0 0 2em; list-style: none; }
-.howto li::before { content: "・"; color: var(--c-sub); }
-.touch-note { border-left: 3px solid var(--c-note); padding: 0.2em 0 0.2em 0.8em; margin: 0 0 1.4em; }
-.foot { margin-top: 4em; }
-.tools { display: flex; flex-wrap: wrap; gap: 0.6em 0; }
-.status { margin: 0.8em 0 0; color: var(--c-sub); font-size: 0.85rem; min-height: 1.4em; }
-
-/* 稽古 */
-.hud { display: flex; align-items: baseline; font-size: 1.1rem; }
-.hud .time { font-family: var(--mincho); font-size: 2rem; }
-.hud-gap { flex: 1; }
-.bar { height: 3px; background: var(--c-rule); margin: 0.4em 0 2.4em; }
-.bar-fill { height: 100%; width: 100%; background: var(--c-text); }
-.ippon { color: var(--c-ippon); font-family: var(--mincho); font-size: 1.2rem; letter-spacing: 0.2em; opacity: 0; transition: opacity 0.25s; }
-.ippon.show { opacity: 1; }
-.bonus { margin-left: 0.8em; color: var(--c-sub); font-size: 0.85rem; opacity: 0; transition: opacity 0.25s; }
-.bonus.show { opacity: 1; }
-
-.card { border-top: 1px solid var(--c-rule); border-bottom: 1px solid var(--c-rule); padding: 1.6em 0.6em; margin-inline: -0.6em; transition: background-color 0.1s; }
-.card.miss { background: var(--c-miss-bg); }
-.sentence { font-family: var(--mincho); font-size: clamp(1.4rem, 4.2vw, 2.1rem); line-height: 1.6; margin: 0 0 0.6em; overflow-wrap: anywhere; }
-.sentence mark { background: none; color: var(--c-word); border-bottom: 2px solid var(--c-word); }
-.kana { font-family: var(--mincho); font-size: clamp(1rem, 2.6vw, 1.3rem); margin: 0 0 1em; overflow-wrap: anywhere; }
-.kana .rest { color: var(--c-kana-rest); }
-.kana .done { color: var(--c-kana-done); font-weight: 600; }
-.romaji { font-family: var(--mono); font-size: clamp(0.95rem, 2.6vw, 1.35rem); margin: 0; overflow-wrap: anywhere; word-break: break-all; letter-spacing: 0.04em; }
-.romaji .rest { color: var(--c-rest); }
-.romaji .typed { color: var(--c-typed); font-weight: 600; }
-.notice { color: var(--c-note); min-height: 1.7em; margin: 0.8em 0 0; }
-.prev { color: var(--c-sub); font-size: 0.85rem; min-height: 1.7em; margin: 0.4em 0; }
-.hint { color: var(--c-sub); font-size: 0.85rem; margin-top: 2em; }
-
-/* 結果 */
-.heading { font-family: var(--mincho); font-weight: 600; font-size: 1.5rem; margin: 0 0 1em; }
-.score-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.2em 0.6em; margin-bottom: 0.6em; }
-.score { font-family: var(--mincho); font-size: 3rem; line-height: 1.2; }
-.note { margin: 0.2em 0; }
-.stats { margin: 1.4em 0; border-top: 1px solid var(--c-rule); }
-.stats .row { display: flex; justify-content: space-between; gap: 1em; padding: 0.5em 0; border-bottom: 1px solid var(--c-rule); }
-.stats dt { color: var(--c-sub); }
+/* ---- 結果 ---- */
+.heading { align-self: stretch; display: flex; align-items: center; gap: 24px; margin: 28px 0 0; padding: 0 0; font-family: var(--mincho); font-size: 1.6rem; font-weight: 400; letter-spacing: 0.3em; }
+.heading::before, .heading::after { content: ""; flex: 1; height: var(--line); background: var(--rule); }
+.heading span { padding: 0 6px; }
+.result-main { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 10px 40px 56px; }
+.cols { display: grid; grid-template-columns: minmax(300px, 380px) 1px minmax(240px, 300px); gap: 0 56px; margin: 28px 0 30px; align-items: start; }
+.cols .divider { align-self: stretch; background: var(--rule); }
+.score-line { display: flex; align-items: center; gap: 22px; margin-bottom: 8px; }
+.score-line .lbl { align-self: flex-start; font-size: 0.85rem; color: var(--muted); letter-spacing: var(--track-label); }
+.score-line .score { font-family: var(--mincho); font-size: 4.4rem; line-height: 1.1; }
+.stats { margin: 14px 0 0; padding: 0; border-top: var(--line) solid var(--rule); }
+.stats .row { display: flex; justify-content: space-between; gap: 16px; padding: 7px 2px; border-bottom: var(--line) solid var(--rule); font-size: 0.9rem; }
+.stats dt { color: var(--muted); }
 .stats dd { margin: 0; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.misses h3 { font-size: 0.95rem; font-weight: 600; margin: 1.6em 0 0.4em; }
-.misses ol { margin: 0; padding-left: 1.4em; }
+.note { margin: 16px 0 0; padding: 2px 0 2px 12px; border-left: var(--line-accent) solid var(--accent); font-size: 0.85rem; color: var(--muted); letter-spacing: 0.02em; }
+.misses h3 { margin: 0; padding: 0 0 6px; font-size: 0.9rem; font-weight: 400; color: var(--muted); letter-spacing: var(--track-label); border-bottom: var(--line) solid var(--rule); }
+.misses ol { margin: 12px 0 0; padding: 0; list-style: none; font-family: var(--mincho); }
+.misses li { display: flex; align-items: baseline; gap: 10px; padding: 5px 0; letter-spacing: 0.08em; }
+.misses li .n { width: 1.2em; color: var(--muted); }
 .misses code { font-family: var(--mono); }
+.misses .times { margin-left: auto; font-variant-numeric: tabular-nums; }
 
-/* スマホの幅:左右の余白は 16px */
-@media (max-width: 600px) {
-  .screen { padding: 28px 16px 48px; }
-  .title { font-size: 2rem; }
-  .score { font-size: 2.6rem; }
+.result-main .howto { margin-top: 18px; }
+
+/* 幅 1024px 前後(小さめの窓) */
+@media (max-width: 1100px) {
+  .bar { padding: 0 28px; }
+  .play-main { padding-inline: 32px; }
+  .cols { gap: 0 36px; }
 }
 
-/* 動きを減らす設定:ふわっと変わる動き(transition)だけをやめる。色の変化は動きではないので、ミスの塗りはそのまま出す。 */
+/* 稽古中と結果は、字が読みやすいように、筆の跡を少し薄くする */
+.stage.dim .brush { opacity: calc(var(--brush-opacity) * 0.65); }
+
+/* ---- 足もと(小さく控えめに。リンクは薄い文字の色で、下線つき) ---- */
+.site-footer { margin-top: auto; padding: 18px 24px 22px; text-align: center; font-size: 0.75rem; line-height: 1.7; color: var(--muted); letter-spacing: 0.03em; }
+.site-footer p { margin: 0; }
+.site-footer a { color: inherit; text-decoration: underline; text-underline-offset: 0.2em; }
+.site-footer a:hover, .site-footer a:focus-visible { color: var(--accent-text); }
+.site-footer a:focus-visible { outline: 1px solid var(--accent-text); outline-offset: 2px; }
+
+/* フォーカス(Tab で移ったとき) */
+button:focus-visible { outline: 1px solid var(--fg); outline-offset: 2px; }
+.btn:focus-visible { outline: none; }
+
+/* 動きを減らす設定:ふわっと変わる動き(transition)だけをやめる。ミスの塗りなど色の変化はそのまま出す。 */
 @media (prefers-reduced-motion: reduce) {
-  .ippon, .bonus, .card { transition: none; }
+  .ippon-row, .timer .bonus { transition: none; }
 }
+.misses .none { margin: 12px 0 0; font-size: 0.9rem; color: var(--muted); }
