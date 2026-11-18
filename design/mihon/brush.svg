@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <!-- 筆の縁を荒らす(ゆがみ)+ かすれ(筆の向きに沿った筋が抜ける)。外部の画像は使わず、ノイズで作る。
+         フィルターは、回した座標の中で働くので、ノイズの筋も筆の向きにそろう。 -->
+    <filter id="rough" x="-10%" y="-60%" width="120%" height="220%" color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency="0.008 0.03" numOctaves="3" seed="4" result="warp"/>
+      <feDisplacementMap in="SourceGraphic" in2="warp" scale="30" xChannelSelector="R" yChannelSelector="G" result="edge"/>
+      <feTurbulence type="fractalNoise" baseFrequency="0.004 0.22" numOctaves="3" seed="11" result="streak"/>
+      <feColorMatrix in="streak" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  7 0 0 0 -2.5" result="mask"/>
+      <feComposite in="edge" in2="mask" operator="in"/>
+    </filter>
+    <filter id="flick" x="-10%" y="-100%" width="120%" height="300%" color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency="0.01 0.3" numOctaves="2" seed="2" result="s"/>
+      <feColorMatrix in="s" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  8 0 0 0 -3"  result="m"/>
+      <feComposite in="SourceGraphic" in2="m" operator="in"/>
+    </filter>
+  </defs>
+  <!-- 左上から流れる太い筆の跡 -->
+  <g transform="translate(430 200) rotate(-36)">
+    <path filter="url(#rough)" fill="#ffffff" fill-opacity="0.07" d="M-520 20 C -200 -70, 500 -95, 1000 -10 C 560 20, -60 50, -520 150 C -400 90, -470 50, -520 20 Z"/>
+    <path filter="url(#flick)" fill="#e2492d" fill-opacity="0.42" d="M-180 66 C 0 48, 200 40, 330 44 L 330 50 C 200 48, 20 62, -180 80 Z"/>
+  </g>
+  <!-- 右下の筆の跡 -->
+  <g transform="translate(1260 700) rotate(-32)">
+    <path filter="url(#rough)" fill="#ffffff" fill-opacity="0.07" d="M-640 30 C -300 -60, 350 -80, 800 -5 C 420 22, -80 50, -640 140 C -520 90, -590 55, -640 30 Z"/>
+    <path filter="url(#flick)" fill="#e2492d" fill-opacity="0.42" d="M-40 78 C 100 62, 250 56, 370 60 L 370 66 C 250 63, 110 76, -40 92 Z"/>
+  </g>
+</svg>
