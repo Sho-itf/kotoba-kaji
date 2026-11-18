@@ -12,7 +12,7 @@ import { loadSentences, type Sentence } from "../game/sentences.ts";
 import { claimedRank, parseRecord, serializeRecord, type RecordData, type Run } from "../storage/record.ts";
 import { commitRun, getLocalStorage, loadRecord, saveRecord, type KeyValueStore } from "../storage/store.ts";
 import { isTouchOnly } from "./device.ts";
-import { el, rankSeal } from "./dom.ts";
+import { ctaButton, el, rankSeal, siteBar, stage } from "./dom.ts";
 
 /** ミリ秒を「8.5」「1」のように秒で表す */
 function formatSeconds(ms: number): string {
@@ -39,6 +39,7 @@ function keyInfo(e: KeyboardEvent): KeyInfo {
 interface PlayView {
   timeText: HTMLElement;
   barFill: HTMLElement;
+  barExtra: HTMLElement;
   card: HTMLElement;
   sentence: HTMLElement;
   kanaDone: HTMLElement;
@@ -82,35 +83,28 @@ export function startApp(root: HTMLElement): void {
       if (file) void importFile(file);
     });
 
-    const start = el("button", { class: "primary", text: "稽古を始める", attrs: { type: "button" } });
+    const start = ctaButton("稽古を始める");
     start.addEventListener("click", startPlay);
-    const exportBtn = el("button", { class: "quiet", text: "記録を書き出す", attrs: { type: "button" } });
+    const exportBtn = el("button", { text: "記録を書き出す", attrs: { type: "button" } });
     exportBtn.addEventListener("click", exportRecord);
-    const importBtn = el("button", { class: "quiet", text: "記録を取り込む", attrs: { type: "button" } });
+    const importBtn = el("button", { text: "記録を取り込む", attrs: { type: "button" } });
     importBtn.addEventListener("click", () => fileInput.click());
 
     show(
-      el("main", { class: "screen idle" },
-        el("h1", { class: "title", text: "ことば鍛冶" }),
-        el("p", { class: "lead", text: "語彙の例文を、読みのローマ字で打つ稽古です。" }),
-        el("section", { class: "standing" },
-          el("div", { class: "standing-rank" }, el("span", { class: "label", text: "位" }), rankSeal(rank.name, rank.dan)),
-          el("div", { class: "standing-best" },
-            el("span", { class: "label", text: "ベスト" }),
-            el("span", { class: "num", text: record.best ? String(record.best.score) : "―" }),
+      stage({ bar: siteBar() },
+        el("main", { class: "idle-main" },
+          start,
+          el("div", { class: "links" }, exportBtn, el("span", { class: "vline" }), importBtn, fileInput),
+          el("div", { class: "standing" },
+            el("span", { class: "item" }, rankSeal(rank.name, rank.dan)),
+            el("span", { class: "item" }, "ベスト ", el("span", { class: "num", text: record.best ? String(record.best.score) : "―" })),
+            nextNote ? el("span", { class: "item", text: nextNote }) : el("span"),
           ),
-          nextNote ? el("p", { class: "muted small", text: nextNote }) : el("span"),
-        ),
-        touchOnly ? el("p", { class: "touch-note", text: "キーボードのある端末で稽古してください。" }) : el("span"),
-        el("ul", { class: "howto" },
-          el("li", { text: "Enter か Space で稽古を始める" }),
-          el("li", { text: "Esc で中断(中断した回は記録しない)" }),
-          el("li", { text: "稽古は 60 秒から。一本(ミスなしの 1 文)を取ると時間が延びます" }),
-          el("li", { text: "入力は半角英数にしてください" }),
-        ),
-        start,
-        el("footer", { class: "foot" },
-          el("div", { class: "tools" }, exportBtn, importBtn, fileInput),
+          touchOnly ? el("p", { class: "touch-note", text: "キーボードのある端末で稽古してください。" }) : el("span"),
+          el("div", { class: "howto" },
+            el("p", { text: "Enter か Space で稽古を始める ・ Esc で中断(中断した回は記録しない)" }),
+            el("p", { text: "稽古は 60 秒から。一本(ミスなしの 1 文)を取ると時間が延びます。入力は半角英数にしてください。" }),
+          ),
           el("p", { class: "status", text: message, attrs: { role: "status" } }),
           store ? el("span") : el("p", { class: "status", text: "この環境では記録を保存できません。遊ぶことはできます。" }),
         ),
@@ -182,38 +176,36 @@ export function startApp(root: HTMLElement): void {
   }
 
   function buildPlayView(): { root: HTMLElement; parts: PlayView } {
-    const timeText = el("span", { class: "time", text: "60" });
-    const barFill = el("div", { class: "bar-fill" });
+    const timeText = el("span", { class: "num", text: "60" });
+    const bonus = el("span", { class: "bonus", attrs: { "aria-hidden": "true" } });
+    const barFill = el("i");
+    const barExtra = el("b");
     const sentence = el("p", { class: "sentence", attrs: { lang: "ja" } });
     const kanaDone = el("span", { class: "done" });
     const kanaRest = el("span", { class: "rest" });
     const romajiTyped = el("span", { class: "typed" });
     const romajiRest = el("span", { class: "rest" });
     const notice = el("p", { class: "notice", attrs: { role: "alert" } });
-    const ippon = el("span", { class: "ippon", text: "一本", attrs: { "aria-live": "polite" } });
-    const bonus = el("span", { class: "bonus", attrs: { "aria-hidden": "true" } });
+    const ippon = el("div", { class: "ippon-row", text: "一本", attrs: { "aria-live": "polite" } });
     const prev = el("p", { class: "prev" });
-    const card = el("section", { class: "card" },
-      sentence,
-      el("p", { class: "kana", attrs: { lang: "ja" } }, kanaDone, kanaRest),
-      el("p", { class: "romaji" }, romajiTyped, romajiRest),
-    );
-    const rootNode = el("main", { class: "screen play" },
-      el("header", { class: "hud" },
-        el("span", { class: "label", text: "残り" }),
-        el("span", {}, timeText, el("span", { class: "unit", text: " 秒" }), bonus),
-        el("span", { class: "hud-gap" }),
+    const timer = el("div", { class: "timer" },
+      el("span", { class: "lbl", text: "残り" }), timeText, el("span", { class: "unit", text: "秒" }), bonus);
+    const rootNode = stage({ dim: true, bar: siteBar(timer) },
+      el("main", { class: "play-main" },
         ippon,
+        sentence,
+        el("p", { class: "kana", attrs: { lang: "ja" } }, kanaDone, kanaRest),
+        el("div", { class: "field", attrs: { "aria-hidden": "true" } },
+          el("p", { class: "line" }, romajiTyped, el("span", { class: "caret" }), romajiRest)),
+        notice,
+        prev,
+        el("p", { class: "hint", text: "Esc で中断" }),
       ),
-      el("div", { class: "bar" }, barFill),
-      card,
-      notice,
-      prev,
-      el("p", { class: "hint", text: "Esc で中断" }),
+      el("div", { class: "timeline" }, barFill, barExtra),
     );
     return {
       root: rootNode,
-      parts: { timeText, barFill, card, sentence, kanaDone, kanaRest, romajiTyped, romajiRest, notice, ippon, bonus, prev, missTimer: 0, ipponTimer: 0, bonusTimer: 0 },
+      parts: { timeText, barFill, barExtra, card: rootNode, sentence, kanaDone, kanaRest, romajiTyped, romajiRest, notice, ippon, bonus, prev, missTimer: 0, ipponTimer: 0, bonusTimer: 0 },
     };
   }
 
@@ -248,8 +240,11 @@ export function startApp(root: HTMLElement): void {
   function updateTime(state: PlayState): void {
     const left = state.practice.remaining(performance.now());
     state.view.timeText.textContent = String(Math.ceil(left / 1000));
-    // 時間の線は、最初の長さを満ちた状態とする。延びて超えた分は、満ちたままにする。
-    state.view.barFill.style.width = `${Math.min(1, left / DURATION_MS) * 100}%`;
+    // 時間の線:最初の 60 秒ぶんは朱、60 秒を超えて延びたぶんは右に明るい朱で足す。
+    // 全体の長さを「残り時間(60 秒より長いとき)」に取るので、時間が減ると、先に延びたぶんから縮む。
+    const scale = Math.max(DURATION_MS, left);
+    state.view.barFill.style.width = `${(Math.min(left, DURATION_MS) / scale) * 100}%`;
+    state.view.barExtra.style.width = `${((left - Math.min(left, DURATION_MS)) / scale) * 100}%`;
     const over = state.practice.tick(performance.now());
     if (over && over.type === "timeup") finishPlay(state, over.result);
   }
@@ -329,39 +324,53 @@ export function startApp(root: HTMLElement): void {
     const row = (label: string, value: string) => el("div", { class: "row" }, el("dt", { text: label }), el("dd", { text: value }));
 
     const notes: Node[] = [];
-    if (newBest) notes.push(el("p", { class: "note accent", text: "ベストを更新しました。" }));
+    if (newBest) notes.push(el("p", { class: "note", text: "ベストを更新しました。" }));
     const up = rankUpNote(rankBefore, rankAfter);
-    if (up) notes.push(el("p", { class: "note accent", text: up }));
+    if (up) notes.push(el("p", { class: "note", text: up }));
     const shortfall = accuracyShortfallNote(run);
-    if (shortfall) notes.push(el("p", { class: "note muted", text: shortfall }));
-    if (saveFailed) notes.push(el("p", { class: "note muted", text: "この環境では記録を保存できませんでした。" }));
+    if (shortfall) notes.push(el("p", { class: "note", text: shortfall }));
+    if (saveFailed) notes.push(el("p", { class: "note", text: "この環境では記録を保存できませんでした。" }));
+
+    const again = ctaButton("もう一度", true);
+    again.addEventListener("click", startPlay);
 
     show(
-      el("main", { class: "screen result" },
-        el("h2", { class: "heading", text: "稽古の結果" }),
-        el("div", { class: "score-line" },
-          el("span", { class: "label", text: "スコア" }),
-          el("span", { class: "score", text: String(run.score) }),
-          rankSeal(rankAfter.name, rankAfter.dan),
+      stage({ dim: true, bar: siteBar() },
+        el("main", { class: "result-main" },
+          el("h1", { class: "heading" }, el("span", { text: "稽古の結果" })),
+          el("div", { class: "cols" },
+            el("section", {},
+              el("div", { class: "score-line" },
+                el("span", { class: "lbl", text: "スコア" }),
+                el("span", { class: "score", text: String(run.score) }),
+                rankSeal(rankAfter.name, rankAfter.dan),
+              ),
+              el("dl", { class: "stats" },
+                row("打鍵数", String(run.keystrokes)),
+                row("1 秒あたりの打鍵数", formatTenths(keysPerSecondTenths(run.keystrokes, totalMs))),
+                ...(bonusMs > 0 ? [row("延びた時間", `${formatSeconds(bonusMs)} 秒`)] : []),
+                row("正確さ", `${formatAccuracy(accuracyTenths(run.keystrokes, run.misses))} %`),
+                row("打てた文", `${run.sentences} 文`),
+                row("一本", `${run.ippon} 本`),
+                row("ミス", `${run.misses} 回`),
+                row("ベスト", record.best ? String(record.best.score) : "―"),
+              ),
+              ...notes,
+            ),
+            el("div", { class: "divider" }),
+            el("section", { class: "misses" },
+              el("h3", { text: "ミスの多いキー" }),
+              misses.length === 0
+                ? el("p", { class: "none", text: "ミスはありませんでした。" })
+                : el("ol", {}, ...misses.map((m, i) => el("li", {},
+                    el("span", { class: "n", text: `${i + 1}.` }),
+                    el("span", {}, `「${m.kana}」の `, el("code", { text: m.key })),
+                    el("span", { class: "times", text: `${m.count} 回` })))),
+            ),
+          ),
+          again,
+          el("div", { class: "howto" }, el("p", { text: "Enter か Space でもう一度 ・ Esc で戻る" })),
         ),
-        ...notes,
-        el("dl", { class: "stats" },
-          row("打鍵数", String(run.keystrokes)),
-          row("1 秒あたりの打鍵数", formatTenths(keysPerSecondTenths(run.keystrokes, totalMs))),
-          ...(bonusMs > 0 ? [row("延びた時間", `${formatSeconds(bonusMs)} 秒`)] : []),
-          row("正確さ", `${formatAccuracy(accuracyTenths(run.keystrokes, run.misses))} %`),
-          row("打てた文", `${run.sentences} 文`),
-          row("一本", `${run.ippon} 本`),
-          row("ミス", `${run.misses} 回`),
-          row("ベスト", record.best ? String(record.best.score) : "―"),
-        ),
-        el("section", { class: "misses" },
-          el("h3", { text: "ミスの多いキー" }),
-          misses.length === 0
-            ? el("p", { class: "muted", text: "ミスはありませんでした。" })
-            : el("ol", {}, ...misses.map((m) => el("li", {}, `「${m.kana}」の `, el("code", { text: m.key }), `  ${m.count} 回`))),
-        ),
-        el("p", { class: "hint", text: "Enter か Space でもう一度 ・ Esc で戻る" }),
       ),
     );
   }
@@ -377,7 +386,7 @@ export function startApp(root: HTMLElement): void {
   });
 
   // ---------- 起動 ----------
-  show(el("main", { class: "screen" }, el("p", { class: "muted", text: "読み込み中です。" })));
+  show(stage({ bar: siteBar() }, el("main", { class: "idle-main" }, el("p", { class: "status", text: "読み込み中です。" }))));
   loadSentences(import.meta.env.BASE_URL)
     .then((list) => {
       sentences = list;
@@ -385,6 +394,6 @@ export function startApp(root: HTMLElement): void {
     })
     .catch(() => {
       screen = "error";
-      show(el("main", { class: "screen" }, el("h1", { class: "title", text: "ことば鍛冶" }), el("p", { text: "例文を読み込めませんでした。ページを開き直してください。" })));
+      show(stage({ bar: siteBar() }, el("main", { class: "idle-main" }, el("p", { class: "status", text: "例文を読み込めませんでした。ページを開き直してください。" }))));
     });
 }
