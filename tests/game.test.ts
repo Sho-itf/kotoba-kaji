@@ -3,7 +3,7 @@ import data from "../public/sentences.json";
 import { Deck } from "../src/game/deck.ts";
 import { highlightRange } from "../src/game/highlight.ts";
 import { Keiko } from "../src/game/keiko.ts";
-import { nextRank, RANKS, rankOf } from "../src/game/ranks.ts";
+import { accuracyTenths, nextRankAfter, RANKS, rankByName, rankByScoreOnly, rankOfRun } from "../src/game/ranks.ts";
 import { calcScore, topMisses } from "../src/game/score.ts";
 import { parseSentences, type Sentence } from "../src/game/sentences.ts";
 
@@ -25,22 +25,75 @@ describe("スコアと正確さ", () => {
   });
 });
 
+/** 打鍵数 1000 のうち、ミス m 回の稽古(正確さ = 1000 ÷ (1000 + m))を作る代わりに、正確さの 10 倍の整数から作る */
+function runWith(score: number, tenths: number) {
+  // 正確さ tenths/10 % になる打鍵数とミスの数(合計 2000 打)
+  const total = 2000;
+  const keystrokes = Math.ceil((tenths * total) / 1000);
+  return { score, keystrokes, misses: total - keystrokes };
+}
+
 describe("位", () => {
-  it.each([
-    [0, "十級"], [39, "十級"], [40, "九級"], [59, "九級"], [60, "八級"], [199, "二級"], [200, "一級"],
-    [229, "一級"], [230, "初段"], [259, "初段"], [260, "二段"], [300, "三段"], [350, "四段"], [399, "四段"], [400, "五段"], [1000, "五段"],
-  ])("スコア %i は %s", (score, name) => {
-    expect(rankOf(score).name).toBe(name);
+  it("級はスコアだけで決まる(正確さは見ない)", () => {
+    for (const [score, name] of [
+      [0, "十級"], [39, "十級"], [40, "九級"], [59, "九級"], [60, "八級"], [199, "二級"], [200, "一級"], [229, "一級"],
+    ] as const) {
+      expect(rankOfRun(runWith(score, 0)).name).toBe(name);
+      expect(rankOfRun(runWith(score, 1000)).name).toBe(name);
+    }
   });
 
-  it("段だけが dan", () => {
-    expect(RANKS.filter((r) => r.dan).map((r) => r.name)).toEqual(["初段", "二段", "三段", "四段", "五段"]);
+  it("段の境目:スコアと正確さの両方が要る", () => {
+    // 初段 230 / 95.0%
+    expect(rankOfRun(runWith(230, 950)).name).toBe("初段");
+    expect(rankOfRun(runWith(229, 1000)).name).toBe("一級");
+    expect(rankOfRun(runWith(230, 949)).name).toBe("一級");
+    // 七段 500 / 97.5%
+    expect(rankOfRun(runWith(500, 975)).name).toBe("七段");
+    expect(rankOfRun(runWith(500, 974)).name).toBe("六段");
+    // 十段 700 / 98.5%
+    expect(rankOfRun(runWith(700, 985)).name).toBe("十段");
+    expect(rankOfRun(runWith(700, 984)).name).toBe("九段");
+    expect(rankOfRun(runWith(5000, 1000)).name).toBe("十段");
+  });
+
+  it("正確さが足りないと、スコアに見合う段より下になる", () => {
+    // スコア 240・正確さ 93% → 一級
+    expect(rankOfRun(runWith(240, 930)).name).toBe("一級");
+    // スコア 320・正確さ 95.5% → 二段(三段は 96% が要る)
+    expect(rankOfRun(runWith(320, 955)).name).toBe("二段");
+    expect(rankByScoreOnly(320).name).toBe("三段");
+  });
+
+  it("正確さは、画面に出す値(小数第 1 位まで、それ以下は切り捨て)で比べる", () => {
+    // 正確さ 94.996% は、画面では 94.9% なので、初段(95.0%)に届かない
+    expect(accuracyTenths(94996, 5004)).toBe(949);
+    expect(rankOfRun({ score: 300, keystrokes: 94996, misses: 5004 }).name).toBe("一級");
+    expect(rankOfRun({ score: 230, keystrokes: 94996, misses: 5004 }).name).toBe("一級");
+    // ちょうど 95.0%
+    expect(accuracyTenths(95, 5)).toBe(950);
+    expect(rankOfRun({ score: 230, keystrokes: 95, misses: 5 }).name).toBe("初段");
+    // 0.94996 のように割り切れない値も、整数で数えるので誤差が出ない
+    expect(accuracyTenths(19, 1)).toBe(950);
+    expect(accuracyTenths(0, 0)).toBe(0);
+    expect(accuracyTenths(0, 5)).toBe(0);
+  });
+
+  it("段の表:スコアの下限も正確さの下限も、上がる向きに並ぶ", () => {
+    for (let i = 1; i < RANKS.length; i++) {
+      expect(RANKS[i].min).toBeGreaterThan(RANKS[i - 1].min);
+      expect(RANKS[i].minAccuracy).toBeGreaterThanOrEqual(RANKS[i - 1].minAccuracy);
+    }
+    expect(RANKS.filter((r) => r.dan).map((r) => r.name)).toEqual([
+      "初段", "二段", "三段", "四段", "五段", "六段", "七段", "八段", "九段", "十段",
+    ]);
+    expect(rankByName("七段")).toMatchObject({ min: 500, minAccuracy: 97.5 });
   });
 
   it("次の位", () => {
-    expect(nextRank(0)?.name).toBe("九級");
-    expect(nextRank(229)?.name).toBe("初段");
-    expect(nextRank(400)).toBeNull();
+    expect(nextRankAfter(RANKS[0])?.name).toBe("九級");
+    expect(nextRankAfter(rankByName("一級")!)?.name).toBe("初段");
+    expect(nextRankAfter(rankByName("十段")!)).toBeNull();
   });
 });
 
