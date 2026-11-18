@@ -6,6 +6,12 @@ export const RECORD_VERSION = 1;
 export const MAX_HISTORY = 100;
 /** ミスしたキーの種類の上限(取り込むファイルが大きすぎないように) */
 const MAX_MISS_KINDS = 5000;
+/** ミスしたキーの名前の形:「かな:キー」。かなは 1〜8 字(コロンを含まない)、キーは英字か - の 1 字。 */
+const MISS_KEY_FORMAT = /^[^:]{1,8}:[a-z-]$/;
+/** 日時の形(ISO 8601。例 2026-11-18T10:00:00.000Z) */
+/** オブジェクトの特別な名前(これらをキーにした記録は断る) */
+const SPECIAL_NAMES = ["__proto__", "constructor", "prototype", "toString", "hasOwnProperty"];
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})$/;
 
 /** 稽古 1 回ぶんの記録 */
 export interface Run {
@@ -33,7 +39,11 @@ export function emptyRecord(): RecordData {
   return { version: RECORD_VERSION, best: null, history: [], missKeys: {} };
 }
 
-/** 稽古 1 回ぶんを記録に足す(元の記録は変えない)。ベストはスコアが上回ったときだけ更新する。 */
+/**
+ * 稽古 1 回ぶんを記録に足す(元の記録は変えない)。
+ * ベストはスコアが上回ったときだけ更新する。スコア 0 の回(何も打たずに時間切れなど)は履歴に残さない。
+ * ミスしたキーの合計は、スコア 0 でも足す。
+ */
 export function applyRun(
   record: RecordData,
   run: Run,
@@ -47,7 +57,7 @@ export function applyRun(
     record: {
       version: RECORD_VERSION,
       best: newBest ? run : record.best,
-      history: [...record.history, run].slice(-MAX_HISTORY),
+      history: run.score > 0 ? [...record.history, run].slice(-MAX_HISTORY) : record.history,
       missKeys: merged,
     },
   };
@@ -68,13 +78,15 @@ function parseRun(v: unknown): Run | null {
   if (typeof r !== "object" || r === null) return null;
   const accuracy = r.accuracy;
   if (
-    typeof r.at !== "string" || r.at.length > 40 ||
+    typeof r.at !== "string" || r.at.length > 40 || !ISO_DATE.test(r.at) || Number.isNaN(Date.parse(r.at)) ||
     !isCount(r.keystrokes, 100000) || !isCount(r.misses, 100000) ||
     !isCount(r.score, 100000) || !isCount(r.sentences, 100000) || !isCount(r.ippon, 100000) ||
     typeof accuracy !== "number" || !(accuracy >= 0 && accuracy <= 1)
   ) {
     return null;
   }
+  // つじつまが合わない値(スコアは打鍵数を超えない、一本は文の数を超えない)
+  if (r.score > r.keystrokes || r.ippon > r.sentences) return null;
   return {
     at: r.at, keystrokes: r.keystrokes, misses: r.misses, accuracy,
     score: r.score, sentences: r.sentences, ippon: r.ippon,
@@ -116,8 +128,14 @@ export function parseRecord(text: string): ParseResult {
     return { ok: false, error: "ミスしたキーの記録の形がおかしいので、読み込めません。" };
   }
   const entries = Object.entries(mk);
-  if (entries.length > MAX_MISS_KINDS || entries.some(([, n]) => !isCount(n, 10_000_000))) {
-    return { ok: false, error: "ミスしたキーの記録の中身がおかしいので、読み込めません。" };
+  if (entries.length > MAX_MISS_KINDS) {
+    return { ok: false, error: "ミスしたキーの記録が多すぎるので、読み込めません。" };
+  }
+  if (entries.some(([k]) => !MISS_KEY_FORMAT.test(k) || SPECIAL_NAMES.includes(k))) {
+    return { ok: false, error: "ミスしたキーの名前の形がおかしいので、読み込めません。" };
+  }
+  if (entries.some(([, n]) => !isCount(n, 10_000_000))) {
+    return { ok: false, error: "ミスしたキーの回数がおかしいので、読み込めません。" };
   }
 
   return {
