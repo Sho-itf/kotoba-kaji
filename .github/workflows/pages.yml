@@ -1,0 +1,48 @@
+# main に push されると、テストとビルドを行い、できた dist を GitHub Pages に公開する。
+# Actions の画面から手で動かすこともできる(workflow_dispatch)。
+# 事前に GitHub のリポジトリ設定 → Pages → Source を「GitHub Actions」にしておく必要がある。
+# 例文の読みのデータ(public/sentences.json)は Git に入っているので、ここでは Python を動かさない。
+name: pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: ライブラリのインストール
+        run: npm ci
+      - name: テスト(vitest)
+        run: npm test
+      - name: ビルド(型の確認と画面の作成)
+        run: npm run build
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
