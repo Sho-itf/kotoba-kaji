@@ -44,36 +44,38 @@ describe("位", () => {
   });
 
   it("段の境目:スコアと正確さの両方が要る", () => {
-    // 初段 230 / 95.0%
-    expect(rankOfRun(runWith(230, 950)).name).toBe("初段");
+    // 初段 230 / 80.0%
+    expect(rankOfRun(runWith(230, 800)).name).toBe("初段");
     expect(rankOfRun(runWith(229, 1000)).name).toBe("一級");
-    expect(rankOfRun(runWith(230, 949)).name).toBe("一級");
-    // 七段 500 / 97.5%
-    expect(rankOfRun(runWith(500, 975)).name).toBe("七段");
-    expect(rankOfRun(runWith(500, 974)).name).toBe("六段");
-    // 十段 700 / 98.5%
-    expect(rankOfRun(runWith(700, 985)).name).toBe("十段");
-    expect(rankOfRun(runWith(700, 984)).name).toBe("九段");
+    expect(rankOfRun(runWith(230, 799)).name).toBe("一級");
+    // 三段 300 / 87.5%
+    expect(rankOfRun(runWith(300, 875)).name).toBe("三段");
+    expect(rankOfRun(runWith(300, 874)).name).toBe("二段");
+    // 十段 600 / 96.0%
+    expect(rankOfRun(runWith(600, 960)).name).toBe("十段");
+    expect(rankOfRun(runWith(600, 959)).name).toBe("九段");
+    expect(rankOfRun(runWith(599, 1000)).name).toBe("九段");
     expect(rankOfRun(runWith(5000, 1000)).name).toBe("十段");
   });
 
   it("正確さが足りないと、スコアに見合う段より下になる", () => {
-    // スコア 240・正確さ 93% → 一級
-    expect(rankOfRun(runWith(240, 930)).name).toBe("一級");
-    // スコア 320・正確さ 95.5% → 二段(三段は 96% が要る)
-    expect(rankOfRun(runWith(320, 955)).name).toBe("二段");
+    // スコア 240・正確さ 70% → 一級(初段は 80% が要る)
+    expect(rankOfRun(runWith(240, 700)).name).toBe("一級");
+    // スコア 320・正確さ 86% → 二段(三段は 87.5% が要る)
+    expect(rankOfRun(runWith(320, 860)).name).toBe("二段");
     expect(rankByScoreOnly(320).name).toBe("三段");
+    // スコア 240・正確さ 93% は、新しい表では初段
+    expect(rankOfRun(runWith(240, 930)).name).toBe("初段");
   });
 
   it("正確さは、画面に出す値(小数第 1 位まで、それ以下は切り捨て)で比べる", () => {
-    // 正確さ 94.996% は、画面では 94.9% なので、初段(95.0%)に届かない
-    expect(accuracyTenths(94996, 5004)).toBe(949);
-    expect(rankOfRun({ score: 300, keystrokes: 94996, misses: 5004 }).name).toBe("一級");
-    expect(rankOfRun({ score: 230, keystrokes: 94996, misses: 5004 }).name).toBe("一級");
-    // ちょうど 95.0%
-    expect(accuracyTenths(95, 5)).toBe(950);
-    expect(rankOfRun({ score: 230, keystrokes: 95, misses: 5 }).name).toBe("初段");
-    // 0.94996 のように割り切れない値も、整数で数えるので誤差が出ない
+    // 正確さ 79.996% は、画面では 79.9% なので、初段(80.0%)に届かない
+    expect(accuracyTenths(79996, 20004)).toBe(799);
+    expect(rankOfRun({ score: 230, keystrokes: 79996, misses: 20004 }).name).toBe("一級");
+    // ちょうど 80.0%
+    expect(accuracyTenths(80, 20)).toBe(800);
+    expect(rankOfRun({ score: 230, keystrokes: 80, misses: 20 }).name).toBe("初段");
+    // 割り切れない値も、整数で数えるので誤差が出ない
     expect(accuracyTenths(19, 1)).toBe(950);
     expect(accuracyTenths(0, 0)).toBe(0);
     expect(accuracyTenths(0, 5)).toBe(0);
@@ -87,7 +89,8 @@ describe("位", () => {
     expect(RANKS.filter((r) => r.dan).map((r) => r.name)).toEqual([
       "初段", "二段", "三段", "四段", "五段", "六段", "七段", "八段", "九段", "十段",
     ]);
-    expect(rankByName("七段")).toMatchObject({ min: 500, minAccuracy: 97.5 });
+    expect(rankByName("三段")).toMatchObject({ min: 300, minAccuracy: 87.5 });
+    expect(rankByName("十段")).toMatchObject({ min: 600, minAccuracy: 96 });
   });
 
   it("次の位", () => {

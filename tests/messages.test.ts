@@ -11,20 +11,20 @@ function run(score: number, tenths: number) {
 
 describe("結果の画面:正確さが足りなかったときの知らせ", () => {
   it("スコアは三段に届いているが、正確さが足りない", () => {
-    expect(accuracyShortfallNote({ score: 320, keystrokes: 955, misses: 45 })).toBe(
-      "スコアは三段に届いています。正確さ 95.5%(三段は 96% 以上)",
+    expect(accuracyShortfallNote({ score: 320, keystrokes: 855, misses: 145 })).toBe(
+      "スコアは三段に届いています。正確さ 85.5%(三段は 87.5% 以上)",
     );
   });
 
   it("条件の正確さが小数のときも、そのまま出す", () => {
-    expect(accuracyShortfallNote({ score: 520, keystrokes: 970, misses: 30 })).toBe(
-      "スコアは七段に届いています。正確さ 97.0%(七段は 97.5% 以上)",
+    expect(accuracyShortfallNote({ score: 520, keystrokes: 930, misses: 70 })).toBe(
+      "スコアは八段に届いています。正確さ 93.0%(八段は 94% 以上)",
     );
   });
 
-  it("正確さの表示は切り捨て(94.996% は 94.9%)", () => {
-    expect(accuracyShortfallNote({ score: 240, keystrokes: 94996, misses: 5004 })).toBe(
-      "スコアは初段に届いています。正確さ 94.9%(初段は 95% 以上)",
+  it("正確さの表示は切り捨て(79.996% は 79.9%)", () => {
+    expect(accuracyShortfallNote({ score: 240, keystrokes: 79996, misses: 20004 })).toBe(
+      "スコアは初段に届いています。正確さ 79.9%(初段は 80% 以上)",
     );
   });
 
@@ -50,12 +50,13 @@ describe("待機の画面の、次の位までの目安", () => {
   });
 
   it("次が段:スコアと正確さ", () => {
-    expect(nextRankNote(rank("一級"), 205)).toBe("次の 初段 まで:スコア あと 25・正確さ 95% 以上");
-    expect(nextRankNote(rank("六段"), 480)).toBe("次の 七段 まで:スコア あと 20・正確さ 97.5% 以上");
+    expect(nextRankNote(rank("一級"), 205)).toBe("次の 初段 まで:スコア あと 25・正確さ 80% 以上");
+    expect(nextRankNote(rank("六段"), 450)).toBe("次の 七段 まで:スコア あと 30・正確さ 93% 以上");
+    expect(nextRankNote(rank("二段"), 290)).toBe("次の 三段 まで:スコア あと 10・正確さ 87.5% 以上");
   });
 
   it("スコアは足りているが、その回の正確さが足りなかったとき", () => {
-    expect(nextRankNote(rank("一級"), 300)).toBe("次の 初段 まで:1 回の稽古で、スコア 230 以上・正確さ 95% 以上");
+    expect(nextRankNote(rank("一級"), 300)).toBe("次の 初段 まで:1 回の稽古で、スコア 230 以上・正確さ 80% 以上");
   });
 
   it("十段のときは出さない", () => {

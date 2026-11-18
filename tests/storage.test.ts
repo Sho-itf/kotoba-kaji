@@ -236,12 +236,12 @@ describe("名乗る位", () => {
     expect(claimedRank(r).name).toBe("初段");
   });
 
-  it("正確さが足りない回は、スコアに見合う段にならない(スコア 240・93% → 一級)", () => {
-    const r = applyRun(emptyRecord(), runAt(240, 930), {}).record;
+  it("正確さが足りない回は、スコアに見合う段にならない(スコア 240・70% → 一級)", () => {
+    const r = applyRun(emptyRecord(), runAt(240, 700), {}).record;
     expect(r.rank?.name).toBe("一級");
     expect(r.best?.score).toBe(240); // ベストのスコアは別に持つ
-    // スコア 320・95.5% → 二段
-    expect(applyRun(emptyRecord(), runAt(320, 955), {}).record.rank?.name).toBe("二段");
+    // スコア 320・86% → 二段
+    expect(applyRun(emptyRecord(), runAt(320, 860), {}).record.rank?.name).toBe("二段");
   });
 
   it("名乗る位は下がらない(低い回のあとでも、高い位のまま)", () => {
@@ -283,8 +283,8 @@ describe("古い版(1 版)の記録の移し替え", () => {
   });
 
   it("正確さが足りない段を名乗っていた人は、下がる(仕様どおり)", () => {
-    // 古い版では、スコア 300 だけで三段だった。正確さ 90% では、新しい決め方では一級。
-    const run = runAt(300, 900, "2026-11-02T00:00:00.000Z");
+    // 古い版では、スコア 300 だけで三段だった。正確さ 70% では、新しい決め方では一級。
+    const run = runAt(300, 700, "2026-11-02T00:00:00.000Z");
     const parsed = parseRecord(v1(run, [run]));
     expect(parsed.ok && parsed.record.rank?.name).toBe("一級");
     expect(parsed.ok && parsed.record.best?.score).toBe(300);
@@ -331,7 +331,6 @@ describe("2 版の取り込みの確かめ(位)", () => {
   });
 
   it.each([
-    ["位の名前が表に無い", { name: "百段", at: "2026-11-18T10:00:00.000Z" }],
     ["位の日時がおかしい", { name: "三段", at: "きのう" }],
     ["位が文字列", "三段"],
     ["位が空の形", {}],
@@ -343,5 +342,47 @@ describe("2 版の取り込みの確かめ(位)", () => {
   it("ベストがあるのに位が無い記録は断る", () => {
     expect(parseRecord(JSON.stringify({ ...base(), rank: null })).ok).toBe(false);
     expect(parseRecord(JSON.stringify({ ...base(), rank: undefined })).ok).toBe(false);
+  });
+});
+
+describe("表を変えたとき(前の表の記録を、今の表で読む)", () => {
+  const rec = (rank: { name: string; at: string } | null, best: Run | null, history: Run[]) =>
+    JSON.stringify({ version: 2, best, rank, history, missKeys: {} });
+
+  it("前の表で一級だった記録(スコア 240・正確さ 93%)は、今の表では初段になる", () => {
+    const run = runAt(240, 930, "2026-11-05T00:00:00.000Z");
+    const parsed = parseRecord(rec({ name: "一級", at: "2026-11-05T00:00:00.000Z" }, run, [run]));
+    expect(parsed.ok && parsed.record.rank).toEqual({ name: "初段", at: "2026-11-05T00:00:00.000Z" });
+  });
+
+  it("保存されている位が、計算し直した位より高いときは、保存されている方が残る", () => {
+    const low = runAt(100, 990, "2026-11-05T00:00:00.000Z");
+    const stored = { name: "五段", at: "2026-10-01T00:00:00.000Z" };
+    const parsed = parseRecord(rec(stored, low, [low]));
+    expect(parsed.ok && parsed.record.rank).toEqual(stored);
+  });
+
+  it("同じ位なら、保存されている日時を残す", () => {
+    const run = runAt(240, 930, "2026-11-05T00:00:00.000Z");
+    const stored = { name: "初段", at: "2026-11-01T00:00:00.000Z" };
+    const parsed = parseRecord(rec(stored, run, [run]));
+    expect(parsed.ok && parsed.record.rank).toEqual(stored);
+  });
+
+  it("保存されている位の名前が今の表に無いときは、落ちずに、計算し直した位を使う", () => {
+    const run = runAt(300, 900, "2026-11-05T00:00:00.000Z");
+    const parsed = parseRecord(rec({ name: "百段", at: "2026-11-01T00:00:00.000Z" }, run, [run]));
+    expect(parsed.ok && parsed.record.rank).toEqual({ name: "三段", at: "2026-11-05T00:00:00.000Z" });
+    // 履歴もベストも無いなら、位なし
+    const empty = parseRecord(rec({ name: "百段", at: "2026-11-01T00:00:00.000Z" }, null, []));
+    expect(empty.ok && empty.record.rank).toBeNull();
+    expect(claimedRank({ ...emptyRecord(), rank: { name: "百段", at: "2026-11-01T00:00:00.000Z" } }).name).toBe("十級");
+  });
+
+  it("localStorage の記録も、読むときに今の表で計算し直す", () => {
+    const store = memoryStore();
+    const run = runAt(240, 930);
+    store.setItem(STORAGE_KEY, rec({ name: "一級", at: run.at }, run, [run]));
+    expect(loadRecord(store).record.rank?.name).toBe("初段");
   });
 });

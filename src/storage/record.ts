@@ -63,7 +63,16 @@ function claim(current: RankTitle | null, run: Run): RankTitle | null {
   return !cur || rankIndex(got) > rankIndex(cur) ? { name: got.name, at: run.at } : current;
 }
 
-/** 古い版の記録から、名乗る位を計算し直す(ベストと履歴の各回の位のうち、いちばん高いもの) */
+/** 2 つの名乗る位のうち、高い方(同じなら前の方=日時の早い方を残す) */
+export function higherTitle(a: RankTitle | null, b: RankTitle | null): RankTitle | null {
+  const ra = a ? rankByName(a.name) : undefined;
+  const rb = b ? rankByName(b.name) : undefined;
+  if (!ra) return rb ? b : null;
+  if (!rb) return a;
+  return rankIndex(rb) > rankIndex(ra) ? b : a;
+}
+
+/** ベストと履歴から、名乗る位を計算し直す(ベストと履歴の各回の位のうち、いちばん高いもの) */
 export function deriveRank(best: Run | null, history: Run[]): RankTitle | null {
   const runs = [...history, ...(best ? [best] : [])].sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
   let title: RankTitle | null = null;
@@ -156,25 +165,25 @@ export function parseRecord(text: string): ParseResult {
     history.push(run);
   }
 
-  // 名乗る位:2 版は記録のとおり確かめる。1 版には無いので、ベストと履歴から計算し直す。
-  let rank: RankTitle | null;
-  if (d.version === 1) {
-    rank = deriveRank(best, history);
-  } else {
+  // 名乗る位:保存されている位と、ベストと履歴を今の表で計算し直した位の、高い方にする
+  // (表を変えたときに自動で上がる。下がらない)。1 版には位が無いので、計算し直した位だけ。
+  // 保存されている位の名前が今の表に無いときは、落ちずに、計算し直した位を使う。
+  let stored: RankTitle | null = null;
+  if (d.version !== 1) {
     const r = d.rank as Record<string, unknown> | null;
     if (r === null) {
       if (best !== null) return { ok: false, error: "位の記録が足りないので、読み込めません。" };
-      rank = null;
     } else {
       if (
-        typeof r !== "object" || typeof r.name !== "string" || !rankByName(r.name) ||
+        typeof r !== "object" || typeof r.name !== "string" ||
         typeof r.at !== "string" || r.at.length > 40 || !ISO_DATE.test(r.at) || Number.isNaN(Date.parse(r.at))
       ) {
         return { ok: false, error: "位の記録の中身がおかしいので、読み込めません。" };
       }
-      rank = { name: r.name, at: r.at };
+      if (rankByName(r.name)) stored = { name: r.name, at: r.at };
     }
   }
+  const rank = higherTitle(stored, deriveRank(best, history));
 
   const mk = d.missKeys as Record<string, unknown> | null;
   if (typeof mk !== "object" || mk === null || Array.isArray(mk)) {
