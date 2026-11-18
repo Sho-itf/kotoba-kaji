@@ -111,7 +111,7 @@ button { font: inherit; color: inherit; }
 .timeline { display: flex; }
 .timeline i { display: block; height: 100%; width: 100%; background: var(--accent); }
 /* 60 秒を超えて延びたぶん(右の明るい朱)。時間が減ると、先にこちらが縮む。 */
-.timeline b { display: block; height: 100%; width: 0; background: var(--accent-text); }
+.timeline b { display: block; height: 100%; width: 0; background: var(--accent-text); border-left: 3px solid var(--bg); }
 
 /* ---- 結果 ---- */
 .heading { align-self: stretch; display: flex; align-items: center; gap: 24px; margin: 28px 0 0; padding: 0 0; font-family: var(--mincho); font-size: 1.6rem; font-weight: 400; letter-spacing: 0.3em; }
@@ -136,6 +136,22 @@ button { font: inherit; color: inherit; }
 .misses .times { margin-left: auto; font-variant-numeric: tabular-nums; }
 
 .result-main .howto { margin-top: 18px; }
+
+.hint { margin: 10px 0 0; font-size: 0.8rem; color: var(--muted); letter-spacing: var(--track-label); text-align: center; }
+
+/* 高さの低い窓(1024×768 ほど)では、結果の画面を 1 画面に収めるために、余白と大きな字を少し詰める */
+@media (max-height: 800px) {
+  .heading { margin-top: 14px; font-size: 1.4rem; }
+  .result-main { padding-bottom: 12px; }
+  .cols { margin: 16px 0 18px; }
+  .score-line .score { font-size: 3.4rem; }
+  .stats { margin-top: 8px; }
+  .stats .row { padding: 4px 2px; }
+  .note { margin-top: 10px; }
+  .btn.small { height: 54px; }
+  .result-main .howto { margin-top: 10px; }
+  .site-footer { padding: 10px 24px 12px; }
+}
 
 /* 幅 1024px 前後(小さめの窓) */
 @media (max-width: 1100px) {

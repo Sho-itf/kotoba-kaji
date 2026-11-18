@@ -199,6 +199,7 @@ export function startApp(root: HTMLElement): void {
           el("p", { class: "line" }, romajiTyped, el("span", { class: "caret" }), romajiRest)),
         notice,
         prev,
+        el("p", { class: "hint", text: "Esc で中断" }),
       ),
       el("div", { class: "timeline" }, barFill, barExtra),
     );
