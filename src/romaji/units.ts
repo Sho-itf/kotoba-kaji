@@ -96,8 +96,19 @@ function sokuonCandidates(next: Unit | undefined, symbols = ""): Candidate[] {
   return uniq([...doubled, ...separate]);
 }
 
-/** 読みを打つ単位に分ける */
+const unitsCache = new Map<string, Unit[]>();
+
+/** 読みを打つ単位に分ける。同じ読みは作り直さず、同じ結果を返す(結果は読むだけで、書き換えない)。 */
 export function toUnits(kana: string): Unit[] {
+  let units = unitsCache.get(kana);
+  if (!units) {
+    units = buildUnits(kana);
+    unitsCache.set(kana, units);
+  }
+  return units;
+}
+
+function buildUnits(kana: string): Unit[] {
   // まず っ・ん 以外を区切る(後ろから見たときに次の単位を参照できるように)
   const raw: Unit[] = [];
   for (let i = 0; i < kana.length; ) {
