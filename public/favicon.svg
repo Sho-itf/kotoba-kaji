@@ -1,8 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
   <style>
-    .c { stroke: #c8402a; fill: #c8402a; }
-    @media (prefers-color-scheme: dark) { .c { stroke: #ef7c64; fill: #ef7c64; } }
+    .frame { fill: none; stroke: #b8371f; }
+    .char { fill: #b8371f; stroke: none; }
+    @media (prefers-color-scheme: dark) {
+      .frame { stroke: #ef7c64; }
+      .char { fill: #ef7c64; }
+    }
   </style>
-  <rect class="c" x="5" y="5" width="54" height="54" fill="none" stroke-width="4"/>
-  <text class="c" x="32" y="45" font-size="36" font-family="'Hiragino Mincho ProN','Yu Mincho','Noto Serif JP',serif" text-anchor="middle" stroke="none">鍛</text>
+  <rect class="frame" x="5" y="5" width="54" height="54" stroke-width="4"/>
+  <text class="char" x="32" y="45" font-size="36" font-family="'Hiragino Mincho ProN','Yu Mincho','Noto Serif JP',serif" text-anchor="middle">鍛</text>
 </svg>

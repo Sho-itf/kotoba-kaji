@@ -137,8 +137,7 @@ button:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 3px; }
   .score { font-size: 2.6rem; }
 }
 
-/* 動きを減らす設定:ふわっと変わる動きをやめる。ミスの反応は、色の塗りでなく罫線の色で見せる。 */
+/* 動きを減らす設定:ふわっと変わる動き(transition)だけをやめる。色の変化は動きではないので、ミスの塗りはそのまま出す。 */
 @media (prefers-reduced-motion: reduce) {
   .ippon, .card { transition: none; }
-  .card.miss { background: transparent; border-top-color: var(--c-note); border-bottom-color: var(--c-note); }
 }
