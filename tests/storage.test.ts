@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  applyRun, emptyRecord, MAX_HISTORY, parseRecord, serializeRecord, type RecordData, type Run,
+  applyRun, claimedRank, deriveRank, emptyRecord, MAX_HISTORY, parseRecord, serializeRecord, type RecordData, type Run,
 } from "../src/storage/record.ts";
 import {
   BROKEN_KEY_PREFIX, commitRun, loadRecord, saveRecord, STORAGE_KEY, type KeyValueStore,
@@ -71,7 +71,7 @@ describe("書き出しと取り込み", () => {
     ["JSON でない", "これは JSON ではない"],
     ["配列", "[]"],
     ["null", "null"],
-    ["版が違う", JSON.stringify({ ...emptyRecord(), version: 2 })],
+    ["版が違う", JSON.stringify({ ...emptyRecord(), version: 3 })],
     ["版が無い", JSON.stringify({ best: null, history: [], missKeys: {} })],
     ["ベストの中身がおかしい", JSON.stringify({ ...emptyRecord(), best: { score: "高い" } })],
     ["履歴が配列でない", JSON.stringify({ ...emptyRecord(), history: {} })],
@@ -216,5 +216,132 @@ describe("取り込みの確かめ(つじつま)", () => {
   it("正しい形のミスのキーは通る", () => {
     const parsed = parseRecord(withMiss({ "しゃ:y": 2, "ー:-": 1, "っ、た:t": 1 }));
     expect(parsed.ok).toBe(true);
+  });
+});
+
+/** 正確さ(10 倍の整数 tenths)になる稽古。合計 2000 打。 */
+function runAt(score: number, tenths: number, at = "2026-11-18T10:00:00.000Z"): Run {
+  const keystrokes = Math.max(score, Math.ceil((tenths * 2000) / 1000));
+  return { at, keystrokes, misses: 2000 - keystrokes, accuracy: keystrokes / 2000, score, sentences: 5, ippon: 1 };
+}
+
+describe("名乗る位", () => {
+  it("まだ位が無ければ十級", () => {
+    expect(claimedRank(emptyRecord()).name).toBe("十級");
+  });
+
+  it("取れた位を、日時といっしょに持つ", () => {
+    const r = applyRun(emptyRecord(), runAt(250, 960, "2026-11-18T10:00:00.000Z"), {}).record;
+    expect(r.rank).toEqual({ name: "初段", at: "2026-11-18T10:00:00.000Z" });
+    expect(claimedRank(r).name).toBe("初段");
+  });
+
+  it("正確さが足りない回は、スコアに見合う段にならない(スコア 240・93% → 一級)", () => {
+    const r = applyRun(emptyRecord(), runAt(240, 930), {}).record;
+    expect(r.rank?.name).toBe("一級");
+    expect(r.best?.score).toBe(240); // ベストのスコアは別に持つ
+    // スコア 320・95.5% → 二段
+    expect(applyRun(emptyRecord(), runAt(320, 955), {}).record.rank?.name).toBe("二段");
+  });
+
+  it("名乗る位は下がらない(低い回のあとでも、高い位のまま)", () => {
+    let r = applyRun(emptyRecord(), runAt(300, 970, "2026-11-18T10:00:00.000Z"), {}).record;
+    expect(r.rank?.name).toBe("三段");
+    r = applyRun(r, runAt(100, 990, "2026-11-19T10:00:00.000Z"), {}).record;
+    expect(r.rank).toEqual({ name: "三段", at: "2026-11-18T10:00:00.000Z" });
+    r = applyRun(r, runAt(0, 0, "2026-11-20T10:00:00.000Z"), {}).record;
+    expect(r.rank?.name).toBe("三段");
+  });
+
+  it("同じ位をもう一度取っても、日時は最初のまま。上の位を取ると更新する", () => {
+    let r = applyRun(emptyRecord(), runAt(230, 950, "2026-11-18T10:00:00.000Z"), {}).record;
+    r = applyRun(r, runAt(235, 951, "2026-11-19T10:00:00.000Z"), {}).record;
+    expect(r.rank).toEqual({ name: "初段", at: "2026-11-18T10:00:00.000Z" });
+    r = applyRun(r, runAt(260, 950, "2026-11-20T10:00:00.000Z"), {}).record;
+    expect(r.rank).toEqual({ name: "二段", at: "2026-11-20T10:00:00.000Z" });
+  });
+
+  it("スコア 0 の回では、位を取らない", () => {
+    expect(applyRun(emptyRecord(), runAt(0, 0), {}).record.rank).toBeNull();
+  });
+});
+
+describe("古い版(1 版)の記録の移し替え", () => {
+  const v1 = (best: Run | null, history: Run[]) =>
+    JSON.stringify({ version: 1, best, history, missKeys: { "か:k": 2 } });
+
+  it("名乗る位を、ベストと履歴から計算し直す", () => {
+    const history = [runAt(100, 990, "2026-11-01T00:00:00.000Z"), runAt(310, 970, "2026-11-02T00:00:00.000Z"), runAt(150, 900, "2026-11-03T00:00:00.000Z")];
+    const parsed = parseRecord(v1(history[1], history));
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok) {
+      expect(parsed.record.version).toBe(2);
+      expect(parsed.record.rank).toEqual({ name: "三段", at: "2026-11-02T00:00:00.000Z" });
+      expect(parsed.record.history).toEqual(history);
+      expect(parsed.record.missKeys).toEqual({ "か:k": 2 });
+    }
+  });
+
+  it("正確さが足りない段を名乗っていた人は、下がる(仕様どおり)", () => {
+    // 古い版では、スコア 300 だけで三段だった。正確さ 90% では、新しい決め方では一級。
+    const run = runAt(300, 900, "2026-11-02T00:00:00.000Z");
+    const parsed = parseRecord(v1(run, [run]));
+    expect(parsed.ok && parsed.record.rank?.name).toBe("一級");
+    expect(parsed.ok && parsed.record.best?.score).toBe(300);
+  });
+
+  it("ベストだけで履歴が無い(履歴からあふれた)記録も、ベストから位を出す", () => {
+    const parsed = parseRecord(v1(runAt(240, 960), []));
+    expect(parsed.ok && parsed.record.rank?.name).toBe("初段");
+  });
+
+  it("空の記録は位なし", () => {
+    const parsed = parseRecord(v1(null, []));
+    expect(parsed.ok && parsed.record.rank).toBeNull();
+  });
+
+  it("おかしな 1 版は、今までどおり断る", () => {
+    expect(parseRecord(v1(runAt(10, 900, "きのう"), [])).ok).toBe(false);
+    expect(parseRecord(JSON.stringify({ version: 1, best: null, history: [], missKeys: { __proto__x: 1 } })).ok).toBe(false);
+  });
+
+  it("localStorage に残っていた 1 版も、読むときに移し替える", () => {
+    const store = memoryStore();
+    const run = runAt(240, 960);
+    store.setItem(STORAGE_KEY, v1(run, [run]));
+    const loaded = loadRecord(store);
+    expect(loaded.broken).toBe(false);
+    expect(loaded.record.version).toBe(2);
+    expect(loaded.record.rank?.name).toBe("初段");
+  });
+
+  it("deriveRank は、同じ位が続くときは最初の日時を使う", () => {
+    const a = runAt(240, 960, "2026-11-01T00:00:00.000Z");
+    const b = runAt(250, 960, "2026-11-05T00:00:00.000Z");
+    expect(deriveRank(b, [b, a])).toEqual({ name: "初段", at: "2026-11-01T00:00:00.000Z" });
+  });
+});
+
+describe("2 版の取り込みの確かめ(位)", () => {
+  const base = () => applyRun(emptyRecord(), runAt(300, 970), {}).record;
+
+  it("書き出して取り込むと、位も元に戻る", () => {
+    const r = base();
+    expect(parseRecord(serializeRecord(r))).toEqual({ ok: true, record: r });
+  });
+
+  it.each([
+    ["位の名前が表に無い", { name: "百段", at: "2026-11-18T10:00:00.000Z" }],
+    ["位の日時がおかしい", { name: "三段", at: "きのう" }],
+    ["位が文字列", "三段"],
+    ["位が空の形", {}],
+  ])("断る:%s", (_name, rank) => {
+    const text = JSON.stringify({ ...base(), rank });
+    expect(parseRecord(text).ok).toBe(false);
+  });
+
+  it("ベストがあるのに位が無い記録は断る", () => {
+    expect(parseRecord(JSON.stringify({ ...base(), rank: null })).ok).toBe(false);
+    expect(parseRecord(JSON.stringify({ ...base(), rank: undefined })).ok).toBe(false);
   });
 });

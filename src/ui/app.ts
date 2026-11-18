@@ -5,10 +5,11 @@ import { highlightRange } from "../game/highlight.ts";
 import { decideMenuKey, type KeyInfo } from "../game/input.ts";
 import { Keiko, type RunResult } from "../game/keiko.ts";
 import { Practice, type PracticeEvent } from "../game/practice.ts";
-import { nextRank, rankOf, type Rank } from "../game/ranks.ts";
+import { accuracyShortfallNote, nextRankNote, rankUpNote } from "../game/messages.ts";
+import { accuracyTenths, formatAccuracy, type Rank } from "../game/ranks.ts";
 import { topMisses } from "../game/score.ts";
 import { loadSentences, type Sentence } from "../game/sentences.ts";
-import { parseRecord, serializeRecord, type RecordData, type Run } from "../storage/record.ts";
+import { claimedRank, parseRecord, serializeRecord, type RecordData, type Run } from "../storage/record.ts";
 import { commitRun, getLocalStorage, loadRecord, saveRecord, type KeyValueStore } from "../storage/store.ts";
 import { isTouchOnly } from "./device.ts";
 import { el, rankSeal } from "./dom.ts";
@@ -64,8 +65,8 @@ export function startApp(root: HTMLElement): void {
   function renderIdle(): void {
     screen = "idle";
     const bestScore = record.best?.score ?? 0;
-    const rank = rankOf(bestScore);
-    const next = nextRank(bestScore);
+    const rank = claimedRank(record);
+    const nextNote = nextRankNote(rank, bestScore);
 
     const fileInput = el("input", { attrs: { type: "file", accept: "application/json,.json", hidden: "" } });
     fileInput.addEventListener("change", () => {
@@ -91,7 +92,7 @@ export function startApp(root: HTMLElement): void {
             el("span", { class: "label", text: "ベスト" }),
             el("span", { class: "num", text: record.best ? String(record.best.score) : "―" }),
           ),
-          el("p", { class: "muted small", text: next ? `次の ${next.name} まで あと ${next.min - bestScore}` : "いちばん上の位です。" }),
+          nextNote ? el("p", { class: "muted small", text: nextNote }) : el("span"),
         ),
         touchOnly ? el("p", { class: "touch-note", text: "キーボードのある端末で稽古してください。" }) : el("span"),
         el("ul", { class: "howto" },
@@ -258,7 +259,7 @@ export function startApp(root: HTMLElement): void {
     const done = commitRun(store, record, entry, run.missKeys);
     record = done.record;
     saveFailed = !done.saved;
-    renderResult(run, done.newBest, rankOf(done.previous.best?.score ?? 0), rankOf(record.best?.score ?? 0));
+    renderResult(run, done.newBest, claimedRank(done.previous), claimedRank(record));
   }
 
   function onPlayKey(e: KeyboardEvent): void {
@@ -311,7 +312,10 @@ export function startApp(root: HTMLElement): void {
 
     const notes: Node[] = [];
     if (newBest) notes.push(el("p", { class: "note accent", text: "ベストを更新しました。" }));
-    if (rankAfter.name !== rankBefore.name) notes.push(el("p", { class: "note accent", text: `位が上がりました:${rankBefore.name} → ${rankAfter.name}` }));
+    const up = rankUpNote(rankBefore, rankAfter);
+    if (up) notes.push(el("p", { class: "note accent", text: up }));
+    const shortfall = accuracyShortfallNote(run);
+    if (shortfall) notes.push(el("p", { class: "note muted", text: shortfall }));
     if (saveFailed) notes.push(el("p", { class: "note muted", text: "この環境では記録を保存できませんでした。" }));
 
     show(
@@ -325,7 +329,7 @@ export function startApp(root: HTMLElement): void {
         ...notes,
         el("dl", { class: "stats" },
           row("1 分あたりの打鍵数", String(run.keystrokes)),
-          row("正確さ", `${(run.accuracy * 100).toFixed(1)} %`),
+          row("正確さ", `${formatAccuracy(accuracyTenths(run.keystrokes, run.misses))} %`),
           row("打てた文", `${run.sentences} 文`),
           row("一本", `${run.ippon} 本`),
           row("ミス", `${run.misses} 回`),

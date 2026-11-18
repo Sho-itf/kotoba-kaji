@@ -1,7 +1,10 @@
 // 記録(ベスト・稽古の履歴・ミスしたキーの合計)の形と、書き出し・取り込みの確かめ。
 // 画面(DOM)にも localStorage にも依存しない。
 
-export const RECORD_VERSION = 1;
+import { RANKS, rankByName, rankIndex, rankOfRun, type Rank } from "../game/ranks.ts";
+
+/** 形式の版。2:名乗る位(rank)を持つ。1 は古い版で、読むときに 2 に移し替える。 */
+export const RECORD_VERSION = 2;
 /** 稽古の記録は直近これだけ残す */
 export const MAX_HISTORY = 100;
 /** ミスしたキーの種類の上限(取り込むファイルが大きすぎないように) */
@@ -25,10 +28,18 @@ export interface Run {
   ippon: number;
 }
 
+/** 名乗る位:これまでの稽古で取れた、いちばん高い位と、それを取れた日時 */
+export interface RankTitle {
+  name: string;
+  at: string;
+}
+
 export interface RecordData {
   version: number;
   /** これまでのベスト(スコアがいちばん高かった回)。まだ無ければ null。 */
   best: Run | null;
+  /** 名乗る位。まだ位を取っていなければ null(画面では十級)。下がらない。 */
+  rank: RankTitle | null;
   /** 直近 MAX_HISTORY 回まで、古い順 */
   history: Run[];
   /** ミスしたキーの合計("かな:キー" → 回数) */
@@ -36,7 +47,28 @@ export interface RecordData {
 }
 
 export function emptyRecord(): RecordData {
-  return { version: RECORD_VERSION, best: null, history: [], missKeys: {} };
+  return { version: RECORD_VERSION, best: null, rank: null, history: [], missKeys: {} };
+}
+
+/** 名乗る位(まだ無ければ十級) */
+export function claimedRank(record: RecordData): Rank {
+  return (record.rank && rankByName(record.rank.name)) || RANKS[0];
+}
+
+/** 名乗る位を、この回の位と比べて、高ければ更新する。スコア 0 の回では変えない。 */
+function claim(current: RankTitle | null, run: Run): RankTitle | null {
+  if (run.score <= 0) return current;
+  const got = rankOfRun(run);
+  const cur = current ? rankByName(current.name) : undefined;
+  return !cur || rankIndex(got) > rankIndex(cur) ? { name: got.name, at: run.at } : current;
+}
+
+/** 古い版の記録から、名乗る位を計算し直す(ベストと履歴の各回の位のうち、いちばん高いもの) */
+export function deriveRank(best: Run | null, history: Run[]): RankTitle | null {
+  const runs = [...history, ...(best ? [best] : [])].sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+  let title: RankTitle | null = null;
+  for (const run of runs) title = claim(title, run);
+  return title;
 }
 
 /**
@@ -57,6 +89,7 @@ export function applyRun(
     record: {
       version: RECORD_VERSION,
       best: newBest ? run : record.best,
+      rank: claim(record.rank, run),
       history: run.score > 0 ? [...record.history, run].slice(-MAX_HISTORY) : record.history,
       missKeys: merged,
     },
@@ -105,7 +138,7 @@ export function parseRecord(text: string): ParseResult {
   if (typeof d !== "object" || d === null || Array.isArray(d)) {
     return { ok: false, error: "記録の形式ではありません。" };
   }
-  if (d.version !== RECORD_VERSION) {
+  if (d.version !== RECORD_VERSION && d.version !== 1) {
     return { ok: false, error: `形式の版が合いません(このアプリは ${RECORD_VERSION} 版です)。` };
   }
 
@@ -121,6 +154,26 @@ export function parseRecord(text: string): ParseResult {
     const run = parseRun(item);
     if (!run) return { ok: false, error: "稽古の記録の中身がおかしいので、読み込めません。" };
     history.push(run);
+  }
+
+  // 名乗る位:2 版は記録のとおり確かめる。1 版には無いので、ベストと履歴から計算し直す。
+  let rank: RankTitle | null;
+  if (d.version === 1) {
+    rank = deriveRank(best, history);
+  } else {
+    const r = d.rank as Record<string, unknown> | null;
+    if (r === null) {
+      if (best !== null) return { ok: false, error: "位の記録が足りないので、読み込めません。" };
+      rank = null;
+    } else {
+      if (
+        typeof r !== "object" || typeof r.name !== "string" || !rankByName(r.name) ||
+        typeof r.at !== "string" || r.at.length > 40 || !ISO_DATE.test(r.at) || Number.isNaN(Date.parse(r.at))
+      ) {
+        return { ok: false, error: "位の記録の中身がおかしいので、読み込めません。" };
+      }
+      rank = { name: r.name, at: r.at };
+    }
   }
 
   const mk = d.missKeys as Record<string, unknown> | null;
@@ -143,6 +196,7 @@ export function parseRecord(text: string): ParseResult {
     record: {
       version: RECORD_VERSION,
       best,
+      rank,
       history: history.slice(-MAX_HISTORY),
       missKeys: Object.fromEntries(entries) as Record<string, number>,
     },
